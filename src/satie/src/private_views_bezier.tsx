@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import * as React from "react";
-import type { FC } from "react";
-
 export interface IProps {
   fill: string;
   stroke: string;
@@ -26,7 +23,7 @@ export interface IProps {
  * Responsible for the rendering a bezier curve, such as a
  * slur or a tie.
  */
-const Bezier: FC<IProps> = (props) => {
+const Bezier = (props: IProps) => {
   return (
     <path
       d={

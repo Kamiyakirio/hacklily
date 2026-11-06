@@ -1,16 +1,16 @@
 /* eslint-disable no-shadow */
 import { defer, find, isEqual } from "lodash";
-import * as React from "react";
-import { Component } from "react";
+import { useEffect, useReducer, useState } from "react";
 
-import type { Pitch, Note } from "#/musicxml-interfaces";
+import { mergeState } from "#/lib/state";
+import type { Note, Pitch } from "#/musicxml-interfaces";
 import { Count, MxmlAccidental } from "#/musicxml-interfaces";
 import type { IAny } from "#/musicxml-interfaces/operations";
 
-import type { ISong, IMouseEvent } from "../../src/satie";
-import { Song, Patch, Type } from "../../src/satie";
+import type { IMouseEvent, ISong } from "../../src/satie";
+import { Patch, Song, Type } from "../../src/satie";
 
-import * as STYLES from "./tests.css";
+import STYLES from "./tests.module.css";
 
 interface IState {
   error?: Error;
@@ -84,49 +84,63 @@ const songTemplate = `<?xml version="1.0" encoding="UTF-8"?>
   </part>
 </score-partwise>`;
 
-class Sandbox extends Component<{}, IState> {
-  state: IState = {
-    error: null,
-    canonicalOperations: null,
-    operations: null,
-    oldOperations: [null],
-    note: Count.Eighth,
-    type: "N",
-    lastPath: null,
-    lastPitch: null,
-  };
+function Sandbox() {
+  const [state, updateState] = useReducer(
+    mergeState<IState>,
+    undefined,
+    (): IState => ({
+      error: null,
+      canonicalOperations: null,
+      operations: null,
+      oldOperations: [null],
+      note: Count.Eighth,
+      type: "N",
+      lastPath: null,
+      lastPitch: null,
+    }),
+  );
+  const [songHandle, _setSongRef] = useState<ISong | null>(null);
+  useEffect(() => {
+    if (!songHandle) return;
+    const debugWindow = window as Window & { _song?: ISong };
+    debugWindow._song = songHandle;
+    return () => {
+      if (debugWindow._song === songHandle) delete debugWindow._song;
+    };
+  }, [songHandle]);
 
-  private _setNote(note: number) {
-    this.setState({
+  function _setNote(note: number) {
+    updateState({
       note,
     });
   }
-  private _setType(type: "N" | "R") {
-    this.setState({
+
+  function _setType(type: "N" | "R") {
+    updateState({
       type,
     });
   }
-  private _song: ISong;
-  private _undo() {
-    this.setState({
-      operations: this.state.oldOperations[this.state.oldOperations.length - 1],
-      canonicalOperations:
-        this.state.oldOperations[this.state.oldOperations.length - 1],
-      oldOperations: this.state.oldOperations.slice(
+
+  function _undo() {
+    updateState({
+      operations: state.oldOperations[state.oldOperations.length - 1],
+      canonicalOperations: state.oldOperations[state.oldOperations.length - 1],
+      oldOperations: state.oldOperations.slice(
         0,
-        this.state.oldOperations.length - 1,
+        state.oldOperations.length - 1,
       ),
     });
   }
-  private _newMeasure() {
-    const doc = this._song.getDocument(this.state.canonicalOperations);
+
+  function _newMeasure() {
+    const doc = songHandle.getDocument(state.canonicalOperations);
     const measureCount = doc.measures.length;
 
-    const oldOperations = this.state.oldOperations.concat([
-      this.state.canonicalOperations,
+    const oldOperations = state.oldOperations.concat([
+      state.canonicalOperations,
     ]);
-    const operations = this._song.createCanonicalPatch(
-      this.state.canonicalOperations,
+    const operations = songHandle.createCanonicalPatch(
+      state.canonicalOperations,
       {
         documentBuilder: (document) =>
           document.insertMeasure(measureCount, (measure) =>
@@ -144,14 +158,15 @@ class Sandbox extends Component<{}, IState> {
           ),
       },
     );
-    this.setState({
+    updateState({
       operations,
       oldOperations,
       canonicalOperations: operations,
     });
   }
-  private _newCursor() {
-    const doc = this._song.getDocument(this.state.canonicalOperations);
+
+  function _newCursor() {
+    const doc = songHandle.getDocument(state.canonicalOperations);
     const patch = [
       {
         p: [doc.measures[0].uuid, "parts", "P1", "voices", "1", 1],
@@ -160,131 +175,50 @@ class Sandbox extends Component<{}, IState> {
         },
       },
     ];
-    const oldOperations = this.state.oldOperations.concat([
-      this.state.operations,
-    ]);
-    const operations = this._song.createCanonicalPatch(
-      this.state.canonicalOperations,
+    const oldOperations = state.oldOperations.concat([state.operations]);
+    const operations = songHandle.createCanonicalPatch(
+      state.canonicalOperations,
       { raw: patch },
     );
-    this.setState({
+    updateState({
       operations,
       oldOperations,
       canonicalOperations: operations,
     });
   }
-  render() {
-    return (
-      <div>
-        <h1>Satie &ndash; Sandbox</h1>
-        <div className={STYLES.tests}>
-          <p>Use this page to test song editing.</p>
-          <ul style={{ display: "flex", listStyleType: "none" }}>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._setNote.bind(this, Count._32nd)}>
-                32
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._setNote.bind(this, Count._16th)}>
-                16
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._setNote.bind(this, Count.Eighth)}>
-                8
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._setNote.bind(this, Count.Quarter)}>
-                4
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._setNote.bind(this, Count.Half)}>
-                2
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._setNote.bind(this, Count.Whole)}>
-                1
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._setType.bind(this, "N")}>
-                N
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._setType.bind(this, "R")}>
-                R
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._undo.bind(this)}>
-                Undo
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._newMeasure.bind(this)}>
-                +
-              </a>
-            </li>
-            <li style={{ padding: 10 }}>
-              <a href="#" onClick={this._newCursor.bind(this)}>
-                +
-              </a>
-            </li>
-          </ul>
-          <Song
-            baseSrc={songTemplate}
-            onError={this._errorHandler}
-            patches={this.state.operations}
-            onMouseClick={this._mouseClickHandler}
-            onMouseMove={this._mouseMoveHandler}
-            pageClassName={STYLES.page}
-            singleLineMode={true}
-            ref={this._setSongRef}
-          />
-          {/*<pre style={{fontSize: 8, height: 400, overflow: "scroll"}}>{
-                JSON.stringify(this.state.operations, null, 2)}</pre>*/}
-        </div>
-      </div>
-    );
-  }
-  private _errorHandler = (err: Error) => {
+
+  function _errorHandler(err: Error) {
     console.warn(err);
     defer(() => {
-      this.setState({
+      updateState({
         error: err,
       });
     });
-  };
-  private _setSongRef = (song: ISong) => {
-    this._song = song;
-    (window as any)["_song"] = song;
-  };
-  private _mouseMoveHandler = (ev: IMouseEvent) => {
+  }
+
+  function _mouseMoveHandler(ev: IMouseEvent) {
     if (
-      isEqual(this.state.lastPath, ev.path) &&
-      isEqual(ev.pitch, this.state.lastPitch)
+      isEqual(state.lastPath, ev.path) &&
+      isEqual(ev.pitch, state.lastPitch)
     ) {
       return;
     }
-    if (!this._handler(ev, true)) {
-      this.setState({ operations: this.state.canonicalOperations });
+    if (!_handler(ev, true)) {
+      updateState({ operations: state.canonicalOperations });
     }
-  };
-  private _mouseClickHandler = (ev: IMouseEvent) => {
-    this._handler(ev, false);
-  };
-  private _handler(ev: IMouseEvent, isPreview: boolean): boolean {
+  }
+
+  function _mouseClickHandler(ev: IMouseEvent) {
+    _handler(ev, false);
+  }
+
+  function _handler(ev: IMouseEvent, isPreview: boolean): boolean {
     const { path, pitch } = ev;
-    const oldOperations = this.state.oldOperations.concat([
-      this.state.canonicalOperations,
+    const oldOperations = state.oldOperations.concat([
+      state.canonicalOperations,
     ]);
-    const operations = this.state.canonicalOperations;
-    const doc = this._song.getDocument(operations); // TODO: remove getDocument
+    const operations = state.canonicalOperations;
+    const doc = songHandle.getDocument(operations); // TODO: remove getDocument
     const measure = find(
       doc.measures,
       (fmeasure) => String(fmeasure.uuid) === path[0],
@@ -316,22 +250,22 @@ class Sandbox extends Component<{}, IState> {
       const measureUUID = parseInt(path[0] as string, 10);
       let patch: IAny[];
       if (
-        (this.state.type === "N" && chord.length === 1 && chord[0].rest) ||
-        (this.state.type === "R" && chord.length === 1 && !chord[0].rest)
+        (state.type === "N" && chord.length === 1 && chord[0].rest) ||
+        (state.type === "R" && chord.length === 1 && !chord[0].rest)
       ) {
         patch = Patch.createPatch(isPreview, doc, measureUUID, "P1", (part) =>
           part.voice(1, (voice) =>
             voice.at(elIdx).note(0, (note) =>
-              this.state.type === "R"
+              state.type === "R"
                 ? note
                     .pitch(null)
                     .dots([])
-                    .noteType((noteType) => noteType.duration(this.state.note))
+                    .noteType((noteType) => noteType.duration(state.note))
                     .color(isPreview ? "#cecece" : "#000000")
                 : note
                     .pitch(pitch)
                     .dots([])
-                    .noteType((noteType) => noteType.duration(this.state.note))
+                    .noteType((noteType) => noteType.duration(state.note))
                     .accidental((accidental) =>
                       accidental.accidental(MxmlAccidental.Sharp),
                     )
@@ -340,10 +274,10 @@ class Sandbox extends Component<{}, IState> {
           ),
         );
       } else if (
-        this.state.type === "N" &&
+        state.type === "N" &&
         chord.length &&
         !chord[0].rest &&
-        chord[0].noteType.duration !== this.state.note
+        chord[0].noteType.duration !== state.note
       ) {
         patch = Patch.createPatch(isPreview, doc, measureUUID, "P1", (part) =>
           part.voice(
@@ -351,7 +285,7 @@ class Sandbox extends Component<{}, IState> {
             (voice) =>
               voice.note(0, (note) =>
                 note
-                  .noteType((noteType) => noteType.duration(this.state.note))
+                  .noteType((noteType) => noteType.duration(state.note))
                   .color(isPreview ? "#cecece" : "#000000"),
               ),
             elIdx,
@@ -361,18 +295,18 @@ class Sandbox extends Component<{}, IState> {
 
       if (patch) {
         if (isPreview) {
-          this.setState({
-            operations: this._song.createPreviewPatch(operations, {
+          updateState({
+            operations: songHandle.createPreviewPatch(operations, {
               raw: patch,
             }),
             lastPath: path,
             lastPitch: pitch,
           });
         } else {
-          const newOperations = this._song.createCanonicalPatch(operations, {
+          const newOperations = songHandle.createCanonicalPatch(operations, {
             raw: patch,
           });
-          this.setState({
+          updateState({
             operations: newOperations,
             canonicalOperations: newOperations,
             lastPath: null,
@@ -385,6 +319,84 @@ class Sandbox extends Component<{}, IState> {
     }
     return false;
   }
+
+  return (
+    <div>
+      <h1>Satie &ndash; Sandbox</h1>
+      <div className={STYLES.tests}>
+        <p>Use this page to test song editing.</p>
+        <ul style={{ display: "flex", listStyleType: "none" }}>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_setNote.bind(this, Count._32nd)}>
+              32
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_setNote.bind(this, Count._16th)}>
+              16
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_setNote.bind(this, Count.Eighth)}>
+              8
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_setNote.bind(this, Count.Quarter)}>
+              4
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_setNote.bind(this, Count.Half)}>
+              2
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_setNote.bind(this, Count.Whole)}>
+              1
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_setType.bind(this, "N")}>
+              N
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_setType.bind(this, "R")}>
+              R
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_undo.bind(this)}>
+              Undo
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_newMeasure.bind(this)}>
+              +
+            </a>
+          </li>
+          <li style={{ padding: 10 }}>
+            <a href="#" onClick={_newCursor.bind(this)}>
+              +
+            </a>
+          </li>
+        </ul>
+        <Song
+          baseSrc={songTemplate}
+          onError={_errorHandler}
+          patches={state.operations}
+          onMouseClick={_mouseClickHandler}
+          onMouseMove={_mouseMoveHandler}
+          pageClassName={STYLES.page}
+          singleLineMode
+          ref={_setSongRef}
+        />
+        {/*<pre style={{fontSize: 8, height: 400, overflow: "scroll"}}>{
+                JSON.stringify(this.state.operations, null, 2)}</pre>*/}
+      </div>
+    </div>
+  );
 }
 
 export default function SandboxPage() {

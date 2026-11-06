@@ -1,10 +1,10 @@
 import { Link, useSearch } from "@tanstack/react-router";
 import { reduce } from "lodash";
-import * as React from "react";
+import type { ReactNode } from "react";
 
 import Test from "./test";
 
-import * as STYLES from "./tests.css";
+import STYLES from "./tests.module.css";
 
 const TEST_CATEGORIES: { [key: string]: string } = {
   "01": "Pitches",
@@ -208,7 +208,7 @@ export default function Tests(props: { testId?: string }) {
   ).acc;
 
   const headerText = <span>Satie &ndash; LilyPond Test Suite</span>;
-  let description: React.ReactNode;
+  let description: ReactNode;
   if (filter) {
     const showMoreLink =
       filter.length > 1

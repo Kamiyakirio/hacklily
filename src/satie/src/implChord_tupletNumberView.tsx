@@ -8,8 +8,6 @@
  */
 
 import { last, map, reduce } from "lodash";
-import * as React from "react";
-import type { FC } from "react";
 
 import type { Tuplet } from "#/musicxml-interfaces";
 import { AboveBelow } from "#/musicxml-interfaces";
@@ -25,7 +23,7 @@ export interface IProps {
   y2: number;
 }
 
-const TupletNumber: FC<IProps> = (props) => {
+const TupletNumber = (props: IProps) => {
   const { x1, x2, y1, y2, tuplet } = props;
   const { placement } = tuplet;
 

@@ -2,6 +2,7 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import type { ChangeEvent } from "react";
 import { useCallback } from "react";
 
 import Makelily from "#/components/Makelily";
@@ -43,7 +44,7 @@ export const Route = createFileRoute("/makelily")({
   }),
 });
 
-type ChgEv = React.ChangeEvent<HTMLInputElement>;
+type ChgEv = ChangeEvent<HTMLInputElement>;
 
 /**
  * This renders a SPA which demos the makelily modal.

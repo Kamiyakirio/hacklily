@@ -2,7 +2,8 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import { Save, TriangleAlert } from "lucide-react";
-import React from "react";
+import type { ChangeEvent, ReactNode } from "react";
+import { useEffect, useReducer } from "react";
 
 import ModalSaving from "#/components/ModalSaving";
 import { Button } from "#/components/ui/button.tsx";
@@ -20,6 +21,7 @@ import type { File } from "#/lib/gitfs";
 import { Conflict, FileNotFound, ls, rm, write } from "#/lib/gitfs";
 import { renderVersionFor } from "#/lib/lilypondVersion";
 import type RPCClient from "#/lib/RPCClient";
+import { mergeState } from "#/lib/state";
 import { cn } from "#/lib/utils";
 
 interface Props {
@@ -41,140 +43,49 @@ interface State {
  * This is the modal you see when you try to save an untitled file.
  * It asks you for a name.
  */
-class ModalPublish extends React.PureComponent<Props, State> {
-  state: State = {
-    filename: "",
-    files: null,
-    invitationRequired: false,
-    saving: false,
-  };
+function ModalPublish(props: Props) {
+  const [state, updateState] = useReducer(
+    mergeState<State>,
+    undefined,
+    (): State => ({
+      filename: "",
+      files: null,
+      invitationRequired: false,
+      saving: false,
+    }),
+  );
+  useEffect(() => {
+    let active = true;
+    const { accessToken, repo } = props.auth;
+    void ls(accessToken, repo).then((files) => {
+      if (active) updateState({ files });
+    });
+    return () => {
+      active = false;
+    };
+  }, [props.auth]);
 
-  componentDidMount(): void {
-    void this.loadExistingSongs();
-  }
-
-  render(): JSX.Element {
-    // TODO(jocelyn): Split this up
-    const { auth, onHide } = this.props;
-    const { filename, files, invitationRequired, saving } = this.state;
-    let disabled = false;
-
-    if (saving) {
-      return <ModalSaving />;
-    }
-
-    let error: React.ReactNode = null;
-    if (!filename.length) {
-      disabled = true;
-      error = (
-        <span className={cn("text-red-700 flex-1 self-center")}>
-          <TriangleAlert size="1em" className="inline" /> Please enter a
-          filename.
-        </span>
-      );
-    } else if (
-      files &&
-      files.map((file: File) => file.path).indexOf(`${filename}.ly`) !== -1
-    ) {
-      disabled = true;
-      error = (
-        <span className={cn("text-red-700 flex-1 self-center")}>
-          <TriangleAlert size="1em" className="inline" /> That filename is
-          taken.
-        </span>
-      );
-    } else if (invitationRequired) {
-      error = (
-        <span className={cn("text-red-700 flex-1 self-center")}>
-          Permission denied. You may need to{" "}
-          <a
-            href={`https://github.com/${auth.repo}/invitations`}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="underline cursor-pointer text-blue-500"
-          >
-            enable write access
-          </a>{" "}
-          then try agin!
-        </span>
-      );
-    }
-
-    return (
-      <Dialog open={true} onOpenChange={(open) => !open && onHide()}>
-        <DialogContent className="sm:max-w-[565px]">
-          <DialogHeader>
-            <DialogTitle>Save song</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="self-center whitespace-nowrap">
-              Save to:&nbsp;
-              <code className="font-mono">
-                <a
-                  href={`https://github.com/${auth.repo}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline cursor-pointer text-blue-500"
-                >
-                  {`${auth.repo}`}
-                </a>
-                /
-              </code>
-            </div>
-            <div className="relative flex-1">
-              <Input
-                value={filename}
-                className="font-mono pr-12"
-                placeholder="filename"
-                autoFocus={true}
-                onChange={this.handleChange}
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                <code className="font-mono text-xs text-muted-foreground">
-                  .ly
-                </code>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <div className="flex items-center gap-2 w-full">
-              {error}
-              <Button
-                onClick={this.handleSave}
-                disabled={disabled}
-                variant="default"
-              >
-                <Save size="1em" className="inline" />
-                Save
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
-  private handleChange = (ev: React.ChangeEvent<HTMLInputElement>): void => {
+  function handleChange(ev: ChangeEvent<HTMLInputElement>): void {
     const filename: string = ev.target.value.replace(/[^a-zA-Z0-9_-]*/g, "");
-    this.setState({
+    updateState({
       filename,
     });
-  };
+  }
 
-  private handleSave = async (): Promise<void> => {
+  async function handleSave(): Promise<void> {
     let didFail = false;
     try {
-      this.setState({
+      updateState({
         saving: true,
       });
-      const { code, auth, rpc } = this.props;
-      const { filename } = this.state;
+      const { code, auth, rpc } = props;
+      const { filename } = state;
       await doPublish(code, auth, `${filename}.ly`, rpc, false);
       track("github/publish");
     } catch (err) {
       if (err instanceof FileNotFound) {
         didFail = true;
-        this.setState({
+        updateState({
           invitationRequired: true,
         });
 
@@ -185,27 +96,107 @@ class ModalPublish extends React.PureComponent<Props, State> {
       alert(String(err));
       didFail = true;
     } finally {
-      this.setState({
+      updateState({
         saving: false,
       });
       if (!didFail) {
-        this.props.onPublished(
-          `${this.props.auth.repo}/${this.state.filename}.ly`,
-        );
+        props.onPublished(`${props.auth.repo}/${state.filename}.ly`);
       }
     }
-  };
+  }
 
-  private loadExistingSongs = async (): Promise<void> => {
-    const {
-      auth: { accessToken, repo },
-    } = this.props;
+  // TODO(jocelyn): Split this up
+  const { auth, onHide } = props;
+  const { filename, files, invitationRequired, saving } = state;
+  let disabled = false;
 
-    const files: File[] = await ls(accessToken, repo);
-    this.setState({
-      files,
-    });
-  };
+  if (saving) {
+    return <ModalSaving />;
+  }
+
+  let error: ReactNode = null;
+  if (!filename.length) {
+    disabled = true;
+    error = (
+      <span className={cn("text-red-700 flex-1 self-center")}>
+        <TriangleAlert size="1em" className="inline" /> Please enter a filename.
+      </span>
+    );
+  } else if (
+    files &&
+    files.map((file: File) => file.path).indexOf(`${filename}.ly`) !== -1
+  ) {
+    disabled = true;
+    error = (
+      <span className={cn("text-red-700 flex-1 self-center")}>
+        <TriangleAlert size="1em" className="inline" /> That filename is taken.
+      </span>
+    );
+  } else if (invitationRequired) {
+    error = (
+      <span className={cn("text-red-700 flex-1 self-center")}>
+        Permission denied. You may need to{" "}
+        <a
+          href={`https://github.com/${auth.repo}/invitations`}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="underline cursor-pointer text-blue-500"
+        >
+          enable write access
+        </a>{" "}
+        then try agin!
+      </span>
+    );
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onHide()}>
+      <DialogContent className="sm:max-w-[565px]">
+        <DialogHeader>
+          <DialogTitle>Save song</DialogTitle>
+        </DialogHeader>
+        <div className="flex items-center gap-2">
+          <div className="self-center whitespace-nowrap">
+            Save to:&nbsp;
+            <code className="font-mono">
+              <a
+                href={`https://github.com/${auth.repo}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline cursor-pointer text-blue-500"
+              >
+                {`${auth.repo}`}
+              </a>
+              /
+            </code>
+          </div>
+          <div className="relative flex-1">
+            <Input
+              value={filename}
+              className="font-mono pr-12"
+              placeholder="filename"
+              autoFocus
+              onChange={handleChange}
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+              <code className="font-mono text-xs text-muted-foreground">
+                .ly
+              </code>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <div className="flex items-center gap-2 w-full">
+            {error}
+            <Button onClick={handleSave} disabled={disabled} variant="default">
+              <Save size="1em" className="inline" />
+              Save
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function b64EncodeUnicode(str: string): string {

@@ -1,14 +1,14 @@
 @import "./common.css";
 
-:local(.test) {
+.test {
   margin-top: 20px;
 }
 
-:local(.page) {
+.page {
   border: 1px solid var(--color--border--accepted);
 }
 
-:local(.error) {
+.error {
   border: 1px solid var(--color--border--error);
   width: 100%;
   padding: 4px;

@@ -17,6 +17,12 @@ export default class Commands {
     this.showMakelily = showMakelily;
   }
 
+  setShowMakelily(
+    showMakelily: (tool: string, cb?: (ly: string) => void) => void,
+  ) {
+    this.showMakelily = showMakelily;
+  }
+
   clear(): void {
     this.insertNotes = "";
     this.setClef = "";

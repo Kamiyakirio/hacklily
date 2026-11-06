@@ -2,19 +2,16 @@
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import invariant from "invariant";
-import { map, filter, forEach, last } from "lodash";
-import * as PropTypes from "prop-types";
-import * as React from "react";
-import { Component } from "react";
+import { filter, last, map } from "lodash";
+import { useContext, useEffect } from "react";
 
-import type { ScoreHeader, Print } from "#/musicxml-interfaces";
+import type { Print, ScoreHeader } from "#/musicxml-interfaces";
 
-import type { IModel } from "./document";
-import { generateModelKey } from "./document";
 import MeasureView from "./implMeasure_measureView";
 import CreditView from "./implPage_creditView";
 import type { IMeasureLayout } from "./private_measureLayout";
 import { getPageMargins } from "./private_print";
+import { RenderContext } from "./private_renderContext";
 import { tenthsToMM } from "./private_renderUtil";
 
 export interface IProps {
@@ -28,90 +25,85 @@ export interface IProps {
   svgRef?: (svg: SVGSVGElement) => void;
 }
 
-export default class Page extends Component<IProps, {}> {
-  static childContextTypes = {
-    originY: PropTypes.number.isRequired,
-    renderTarget: PropTypes.oneOf(["svg-web", "svg-export"]).isRequired,
-    scale40: PropTypes.number.isRequired,
-  } as any;
+export default function Page({
+  svgRef,
+  onPageHeightChanged,
+  ...props
+}: IProps) {
+  const renderContext = useContext(RenderContext);
 
-  _pageHeight = NaN;
+  /*--- Staves ----------------------------------------------*/
 
-  render(): any {
-    /*--- Staves ----------------------------------------------*/
+  const lineLayouts = props.lineLayouts;
 
-    const lineLayouts = this.props.lineLayouts;
+  /*--- General ---------------------------------------------*/
 
-    /*--- General ---------------------------------------------*/
+  const print = props.print;
+  const pageNum = parseInt(print.pageNumber, 10);
+  invariant(
+    pageNum >= 1,
+    "Page %s isn't a valid page number.",
+    print.pageNumber,
+  );
+  const defaults = props.scoreHeader.defaults;
+  const credits = filter(
+    props.scoreHeader.credits,
+    (cr) => cr.page === pageNum,
+  );
+  const scale40 = (defaults.scaling.millimeters / defaults.scaling.tenths) * 40;
+  const pageLayout = print.pageLayout;
+  const widthMM =
+    props.renderTarget === "svg-export"
+      ? tenthsToMM(scale40, pageLayout.pageWidth) + "mm"
+      : "100%";
+  const heightMM =
+    props.renderTarget === "svg-export"
+      ? tenthsToMM(scale40, pageLayout.pageHeight) + "mm"
+      : "100%";
 
-    const print = this.props.print;
-    const pageNum = parseInt(print.pageNumber, 10);
-    invariant(
-      pageNum >= 1,
-      "Page %s isn't a valid page number.",
-      print.pageNumber,
-    );
-    const defaults = this.props.scoreHeader.defaults;
-    const credits = filter(
-      this.props.scoreHeader.credits,
-      (cr) => cr.page === pageNum,
-    );
-    const scale40 =
-      (defaults.scaling.millimeters / defaults.scaling.tenths) * 40;
-    const pageLayout = print.pageLayout;
-    const widthMM =
-      this.props.renderTarget === "svg-export"
-        ? tenthsToMM(scale40, pageLayout.pageWidth) + "mm"
-        : "100%";
-    const heightMM =
-      this.props.renderTarget === "svg-export"
-        ? tenthsToMM(scale40, pageLayout.pageHeight) + "mm"
-        : "100%";
+  const pageWidth = props.singleLineMode
+    ? last(lineLayouts[0]).originX +
+      last(lineLayouts[0]).width +
+      getPageMargins(pageLayout.pageMargins, 0).rightMargin
+    : pageLayout.pageWidth;
 
-    const pageWidth = this.props.singleLineMode
-      ? last(lineLayouts[0]).originX +
-        last(lineLayouts[0]).width +
-        getPageMargins(pageLayout.pageMargins, 0).rightMargin
-      : pageLayout.pageWidth;
+  const pageHeight = pageLayout.pageHeight;
+  const contextValue = {
+    ...renderContext,
+    originY: pageHeight,
+    renderTarget: props.renderTarget,
+    scale40,
+  };
 
-    const pageHeight = pageLayout.pageHeight;
+  useEffect(() => {
+    onPageHeightChanged?.(pageHeight);
+  }, [pageHeight, onPageHeightChanged]);
 
-    if (pageHeight !== this._pageHeight && this.props.onPageHeightChanged) {
-      this._pageHeight = pageHeight;
-      setTimeout(() => {
-        this.props.onPageHeightChanged(pageHeight);
-      });
-    }
+  /*--- Credits ---------------------------------------------*/
 
-    /*--- Credits ---------------------------------------------*/
+  /*--- Render ----------------------------------------------*/
 
-    // Make sure our credits are keyed.
-    forEach<IModel>(credits as any as IModel[], generateModelKey);
-
-    /*--- Render ----------------------------------------------*/
-
-    return (
+  return (
+    <RenderContext value={contextValue}>
       <svg
-        className={this.props.className}
+        className={props.className}
         style={
-          this.props.renderTarget === "svg-export"
+          props.renderTarget === "svg-export"
             ? undefined
             : {
                 width: "auto",
               }
         }
         data-page={
-          this.props.renderTarget === "svg-export"
-            ? undefined
-            : print.pageNumber
+          props.renderTarget === "svg-export" ? undefined : print.pageNumber
         }
         height={heightMM}
-        ref={this._setSVG}
+        ref={svgRef}
         viewBox={`0 0 ${pageWidth} ${pageHeight}`}
         width={widthMM}
       >
-        {!this.props.singleLineMode &&
-          map(credits, (c) => <CreditView {...c} />)}
+        {!props.singleLineMode &&
+          map(credits, (c, i) => <CreditView key={i} {...c} />)}
         {map(lineLayouts, (lineLayout) =>
           map(lineLayout, (measureLayout) => (
             <MeasureView
@@ -122,25 +114,6 @@ export default class Page extends Component<IProps, {}> {
           )),
         )}
       </svg>
-    );
-  }
-
-  private _setSVG: (svg: SVGSVGElement) => void = (svg) => {
-    if (this.props.svgRef) {
-      this.props.svgRef(svg);
-    }
-  };
-
-  getChildContext() {
-    const defaults = this.props.scoreHeader.defaults;
-    const print = this.props.print;
-    const scale40 =
-      (defaults.scaling.millimeters / defaults.scaling.tenths) * 40;
-
-    return {
-      originY: print.pageLayout.pageHeight,
-      renderTarget: this.props.renderTarget,
-      scale40: scale40,
-    };
-  }
+    </RenderContext>
+  );
 }

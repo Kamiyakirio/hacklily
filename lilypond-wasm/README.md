@@ -93,7 +93,7 @@ node $PREFIX/bin/lilypond -dbackend=cairo --svg -o out score.ly
   sort/free entry points and weak pointers, pango's attribute copying, guile's
   hashtab/extensions, glib iface_init). The class can be re-audited after a
   version bump by recompiling with `-fsyntax-only -Wno-everything
--Wcast-function-type-strict` and filtering for casts that change arity,
+  -Wcast-function-type-strict` and filtering for casts that change arity,
   return presence, or a non-i32 value class.
 - bdwgc registers no static roots on Emscripten: needed same fix as bdwgc's WASI port
 - `--spill-pointers` was needed to make wasm locals visible to the collector

@@ -2,13 +2,13 @@
  * @file part of Satie test suite
  *
  * Regression test for inserting a note via the keyboard (ToolNoteEdit's
- * `handleKeyPress`). When the document's `<divisions>` is too coarse to
+ * `handleTextInput`). When the document's `<divisions>` is too coarse to
  * represent the chosen note duration, `calcDivisions` throws a
  * `FractionalDivisionsException`. The mouse path avoids this because the
  * preview pass runs first and the engine's `refresh` catches the exception
  * and bumps `<divisions>`. The keyboard path commits directly with
  * `Patch.createPatch(false, ...)` / `createCanonicalPatch`, so the exception
- * used to escape unhandled out of the React `onKeyPress` handler.
+ * used to escape unhandled out of the React `onKeyDown` handler.
  *
  * The fix bumps `<divisions>` during patch-building (in `fixMetre`) so metre
  * cleanup (`simplifyRests`, which builds a per-integer-division character
@@ -110,7 +110,7 @@ describe("keyboard note insertion with coarse divisions", function () {
     it(`inserts a ${name} note via insertChord without throwing and fills the bar`, function () {
       const measureUUID = song.getDocument(null).measures[0].uuid;
 
-      // Reproduces ToolNoteEdit.handleKeyPress: a note inserted at the cursor
+      // Reproduces ToolNoteEdit.handleTextInput: a note inserted at the cursor
       // (divisions=1 cannot represent it, so calcDivisions throws
       // FractionalDivisionsException during patch building).
       const buildPatch = (): IAny[] =>
@@ -143,7 +143,7 @@ describe("keyboard note insertion with coarse divisions", function () {
       } catch (err) {
         if (err instanceof FractionalDivisionsException) {
           // The exact failure this test guards against: the exception escapes
-          // patch-building (and thus the React onKeyPress handler) unhandled.
+          // patch-building (and thus the React onKeyDown handler) unhandled.
           throw new Error(
             `FractionalDivisionsException escaped patch-building ` +
               `(requiredDivisions=${err.requiredDivisions})`,

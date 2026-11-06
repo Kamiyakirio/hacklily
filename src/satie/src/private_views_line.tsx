@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import * as React from "react";
-import type { FC } from "react";
-
 export interface IProps {
   key?: string | number;
   className?: string;
@@ -18,7 +15,7 @@ export interface IProps {
 /**
  * Renders a straight line.
  */
-const Line: FC<IProps> = (props) => {
+const Line = (props: IProps) => {
   return (
     <line
       className={props.className}

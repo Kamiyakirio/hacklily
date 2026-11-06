@@ -4,20 +4,18 @@
 /* eslint-disable import/first */
 
 import { find } from "lodash";
-import type { ReactElement } from "react";
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type {
-  ScoreHeader,
-  Print,
-  Grouping,
-  FiguredBass,
   Attributes,
-  Sound,
-  Direction,
-  Harmony,
   Barline,
+  Direction,
+  FiguredBass,
+  Grouping,
+  Harmony,
+  Print,
+  ScoreHeader,
+  Sound,
 } from "#/musicxml-interfaces";
 import type { IAny } from "#/musicxml-interfaces/operations";
 
@@ -223,7 +221,7 @@ export class Document {
     onOperationsAppended?: (ops: IAny[]) => void,
     ref?: (svg: SVGSVGElement) => void,
     onPageHeightChanged?: (height: number) => void,
-  ): ReactElement<any> {
+  ) {
     const opts: ILayoutOptions = {
       document: this,
       attributes: {},

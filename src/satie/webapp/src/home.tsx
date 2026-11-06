@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import * as React from "react";
 
 import Test from "./test";
 

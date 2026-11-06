@@ -2,12 +2,11 @@
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import invariant from "invariant";
-import * as PropTypes from "prop-types";
-import type { ReactElement } from "react";
-import React, { Component } from "react";
+import { useContext } from "react";
 
-import type { Dynamics, Direction } from "#/musicxml-interfaces";
+import type { Direction, Dynamics } from "#/musicxml-interfaces";
 
+import { RenderContext } from "./private_renderContext";
 import Glyph from "./private_views_glyph";
 
 export interface IProps {
@@ -15,52 +14,9 @@ export interface IProps {
   key?: string | number;
 }
 
-export default class DynamicsView extends Component<IProps, {}> {
-  static contextTypes = {
-    originY: PropTypes.number,
-  };
-
-  declare context: {
-    originY: number;
-  };
-
-  render(): ReactElement<any> {
-    const layout = this.props.layout;
-    const model = layout.model;
-    const dynamicsContainer = model.directionTypes.filter(
-      (dt) => dt.dynamics,
-    )[0];
-    invariant(!!dynamicsContainer, "No dynamics found!");
-    const dynamics =
-      typeof dynamicsContainer !== "number" &&
-      typeof dynamicsContainer !== "function" &&
-      dynamicsContainer.dynamics;
-
-    const initX =
-      this.props.layout.overrideX +
-      dynamics.defaultX +
-      (dynamics.relativeX || 0);
-    const initY =
-      (this.context.originY || 0) -
-      dynamics.defaultY -
-      (dynamics.relativeY || 0);
-
-    const glyphName = this.getGlyphName(dynamics);
-    if (!glyphName) {
-      return null;
-    }
-
-    return (
-      <Glyph
-        fill={dynamics.color || "black"}
-        glyphName={glyphName}
-        x={initX}
-        y={initY}
-      />
-    );
-  }
-
-  getGlyphName(dynamics: Dynamics) {
+export default function DynamicsView(props: IProps) {
+  const renderContext = useContext(RenderContext);
+  function getGlyphName(dynamics: Dynamics) {
     /* Not included in MusicXML:
 
           "dynamicMessaDiVoce": "U+E540",
@@ -131,4 +87,34 @@ export default class DynamicsView extends Component<IProps, {}> {
         return null;
     }
   }
+
+  const layout = props.layout;
+  const model = layout.model;
+  const dynamicsContainer = model.directionTypes.filter((dt) => dt.dynamics)[0];
+  invariant(!!dynamicsContainer, "No dynamics found!");
+  const dynamics =
+    typeof dynamicsContainer !== "number" &&
+    typeof dynamicsContainer !== "function" &&
+    dynamicsContainer.dynamics;
+
+  const initX =
+    props.layout.overrideX + dynamics.defaultX + (dynamics.relativeX || 0);
+  const initY =
+    (renderContext.originY || 0) -
+    dynamics.defaultY -
+    (dynamics.relativeY || 0);
+
+  const glyphName = getGlyphName(dynamics);
+  if (!glyphName) {
+    return null;
+  }
+
+  return (
+    <Glyph
+      fill={dynamics.color || "black"}
+      glyphName={glyphName}
+      x={initX}
+      y={initY}
+    />
+  );
 }

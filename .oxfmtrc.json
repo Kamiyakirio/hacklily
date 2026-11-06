@@ -13,6 +13,7 @@
     "static/**",
     "src/vendor/**",
     "src/__mocks__/**",
+    "src/routeTree.gen.ts",
     "src/musicxml-interfaces/private/writeBuilders.js"
   ]
 }

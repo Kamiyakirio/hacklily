@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
+import { useReducer } from "react";
 
+import { mergeState } from "#/lib/state";
 import type { Time } from "#/musicxml-interfaces";
 import { TimeSymbolType } from "#/musicxml-interfaces";
 import { Addons as SatieAddons } from "#/satie/src/satie";
@@ -88,79 +89,74 @@ function getInitialState(props: MakelilyToolProps): State {
 /**
  * A tool which allows a time signature to be inserted.
  */
-export default class ToolSetTime extends React.Component<
-  MakelilyToolProps,
-  State
-> {
-  state: State = getInitialState(this.props);
+export default function ToolSetTime(props: MakelilyToolProps) {
+  const [state, updateState] = useReducer(
+    mergeState<State>,
+    undefined,
+    (): State => getInitialState(props),
+  );
 
-  render(): JSX.Element {
-    const tsViews: JSX.Element[] = stdTime.map(
-      (time: Time & LyTime, i: number) => {
-        const timeSpec: Time & LyTime = {
-          defaultX: 0,
-          defaultY: 0,
-          relativeY: 0,
-          ...time,
-        };
-
-        const selected: boolean = i === this.state.selectedTime;
-        const className: string = cn(
-          makelilyStyles.selectableOption,
-          selected && makelilyStyles.selectableSelected,
-          makelilyStyles.paletteSml,
-        );
-
-        return (
-          <span
-            className={className}
-            role="button"
-            onClick={(): void => this.setState({ selectedTime: i })}
-            key={i}
-          >
-            <svg
-              className={cn(makelilyStyles.resetFont)}
-              viewBox={timeSpec.tsViewbox}
-            >
-              <SatieAddons.TimeSignature spec={timeSpec} />
-            </svg>
-          </span>
-        );
-      },
-    );
-
-    return (
-      <div className={cn(makelilyStyles.tool)}>
-        <div className={cn(makelilyStyles.section)}>
-          <h3 className={cn(makelilyStyles.toolHeading)}>Time Signature</h3>
-          <div className={cn(makelilyStyles.selectableList)}>{tsViews}</div>
-        </div>
-        <div className={cn(makelilyStyles.spacer)} />
-        <div className={cn(makelilyStyles.section)}>
-          <pre className={cn(makelilyStyles.lyPreview)}>
-            {this.generateLy()}
-          </pre>
-
-          <button
-            className={cn(makelilyStyles.insert)}
-            onClick={this.handleInsertLyClicked}
-          >
-            Insert this code into Hacklily
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  private generateLy(): string {
-    const time: Time = stdTime[this.state.selectedTime];
+  function generateLy(): string {
+    const time: Time = stdTime[state.selectedTime];
     const isNumeric: boolean = time.symbol == null;
 
     return `${isNumeric ? "\\numericTimeSignature" : "\\defaultTimeSignature"}
 \\time ${time.beats[0]}/${time.beatTypes[0]}`;
   }
 
-  private handleInsertLyClicked = (): void => {
-    this.props.onInsertLy(this.generateLy());
-  };
+  function handleInsertLyClicked(): void {
+    props.onInsertLy(generateLy());
+  }
+
+  const tsViews = stdTime.map((time: Time & LyTime, i: number) => {
+    const timeSpec: Time & LyTime = {
+      defaultX: 0,
+      defaultY: 0,
+      relativeY: 0,
+      ...time,
+    };
+
+    const selected: boolean = i === state.selectedTime;
+    const className: string = cn(
+      makelilyStyles.selectableOption,
+      selected && makelilyStyles.selectableSelected,
+      makelilyStyles.paletteSml,
+    );
+
+    return (
+      <span
+        className={className}
+        role="button"
+        onClick={(): void => updateState({ selectedTime: i })}
+        key={i}
+      >
+        <svg
+          className={cn(makelilyStyles.resetFont)}
+          viewBox={timeSpec.tsViewbox}
+        >
+          <SatieAddons.TimeSignature spec={timeSpec} />
+        </svg>
+      </span>
+    );
+  });
+
+  return (
+    <div className={cn(makelilyStyles.tool)}>
+      <div className={cn(makelilyStyles.section)}>
+        <h3 className={cn(makelilyStyles.toolHeading)}>Time Signature</h3>
+        <div className={cn(makelilyStyles.selectableList)}>{tsViews}</div>
+      </div>
+      <div className={cn(makelilyStyles.spacer)} />
+      <div className={cn(makelilyStyles.section)}>
+        <pre className={cn(makelilyStyles.lyPreview)}>{generateLy()}</pre>
+
+        <button
+          className={cn(makelilyStyles.insert)}
+          onClick={handleInsertLyClicked}
+        >
+          Insert this code into Hacklily
+        </button>
+      </div>
+    </div>
+  );
 }

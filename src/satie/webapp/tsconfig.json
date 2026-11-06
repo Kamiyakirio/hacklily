@@ -1,15 +1,4 @@
 {
-  "compilerOptions": {
-    "experimentalDecorators": true,
-    "jsx": "react",
-    "module": "commonjs",
-    "noImplicitAny": true,
-    "outDir": "dist",
-    "rootDir": "..",
-    "pretty": true,
-    "removeComments": false,
-    "sourceMap": true,
-    "target": "es2015"
-  },
-  "files": ["./src/index.tsx"]
+  "extends": "../../../tsconfig.json",
+  "include": ["src"]
 }

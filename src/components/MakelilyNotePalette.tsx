@@ -2,8 +2,8 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import { chunk, isEqual, times } from "lodash";
-import { Undo, Redo, Plus } from "lucide-react";
-import * as React from "react";
+import { Plus, Redo, Undo } from "lucide-react";
+import { memo } from "react";
 
 import { cn } from "#/lib/utils";
 import type {
@@ -277,51 +277,9 @@ const articulations: Notations[] = [
 /**
  * Renders a list of tools that can be selected in the note editor.
  */
-export default class NotePalette extends React.Component<Props> {
-  render(): JSX.Element {
-    const cls: string = cn(
-      styles.paletteSml,
-      styles.paletteBtnOff,
-      styles.paletteTxt,
-    );
-
-    return (
-      <div className={cn(styles.controlWidget)}>
-        {this.renderSecondRow()}
-        <div className={cn(styles.controlRow)}>
-          {this.renderDuration()}
-          {this.renderModifiers()}
-          {this.renderAccidentals()}
-          <div className={cn(styles.spring)} />
-          <ul className={cn(styles.controls)}>
-            <div className={cn(styles.controlSeperator)} />
-            <a href="#" onClick={this.props.undo} className={cls} role="button">
-              <Undo />
-            </a>
-            <div className={cn(styles.controlSeperator)} />
-            <a href="#" onClick={this.props.redo} className={cls} role="button">
-              <Redo />
-            </a>
-            <div className={cn(styles.controlSeperator)} />
-            <a
-              href="#"
-              onClick={this.props.newMeasure}
-              className={cls}
-              role="button"
-            >
-              <Plus /> Add Bar
-            </a>
-          </ul>
-        </div>
-      </div>
-    );
-  }
-  shouldComponentUpdate(nextProps: Props): boolean {
-    return !isEqual(nextProps, this.props);
-  }
-
-  private renderAccidentals(): JSX.Element {
-    const { accidental, editType } = this.props;
+function NotePalette(props: Props) {
+  function renderAccidentals() {
+    const { accidental, editType } = props;
 
     function classNameForAcc(otherAccidental: MxmlAccidental): string {
       return cn(
@@ -346,7 +304,7 @@ export default class NotePalette extends React.Component<Props> {
         <ul className={cn(styles.controls)}>
           <a
             href="#"
-            onClick={this.setAccidentalNone}
+            onClick={setAccidentalNone}
             className={classNameForAcc(MxmlAccidental.Natural)}
             role="button"
           >
@@ -356,7 +314,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={this.setAccidentalF}
+            onClick={setAccidentalF}
             className={classNameForAcc(MxmlAccidental.Flat)}
             role="button"
           >
@@ -366,7 +324,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={this.setAccidentalS}
+            onClick={setAccidentalS}
             className={classNameForAcc(MxmlAccidental.Sharp)}
             role="button"
           >
@@ -376,9 +334,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={
-              this.props.editType === "R" ? this.setTypeN : this.setTypeR
-            }
+            onClick={props.editType === "R" ? setTypeN : setTypeR}
             className={getTypeClass("R")}
             role="button"
           >
@@ -388,9 +344,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={
-              this.props.editType === "P" ? this.setTypeN : this.setTypeP
-            }
+            onClick={props.editType === "P" ? setTypeN : setTypeP}
             className={getTypeClass("P")}
             role="button"
           >
@@ -404,36 +358,34 @@ export default class NotePalette extends React.Component<Props> {
     );
   }
 
-  private renderArticulations(): JSX.Element {
-    const { editType, notation, setNotation } = this.props;
+  function renderArticulations() {
+    const { editType, notation, setNotation } = props;
 
     if (editType !== "P") {
       return null;
     }
 
-    const rows: JSX.Element[] = chunk(articulations, 3).map(
+    const rows = chunk(articulations, 3).map(
       (row: Notations[], idx: number) => {
-        const columns: JSX.Element[] = row.map(
-          (model: Notations, jdx: number): JSX.Element => {
-            const className: string = cn(
-              isEqual(notation, model)
-                ? styles.paletteBtnOn
-                : styles.paletteBtnOff,
-            );
+        const columns = row.map((model: Notations, jdx: number) => {
+          const className: string = cn(
+            isEqual(notation, model)
+              ? styles.paletteBtnOn
+              : styles.paletteBtnOff,
+          );
 
-            return (
-              <a
-                href="#"
-                onClick={(): void => setNotation(model)}
-                key={jdx}
-                className={className}
-                role="button"
-              >
-                <SatieAddons.NotationView spec={model} />
-              </a>
-            );
-          },
-        );
+          return (
+            <a
+              href="#"
+              onClick={(): void => setNotation(model)}
+              key={jdx}
+              className={className}
+              role="button"
+            >
+              <SatieAddons.NotationView spec={model} />
+            </a>
+          );
+        });
 
         return (
           <ul className={cn(styles.controls)} key={idx}>
@@ -451,13 +403,12 @@ export default class NotePalette extends React.Component<Props> {
     );
   }
 
-  private renderDuration(): JSX.Element {
-    const { note } = this.props;
+  function renderDuration() {
+    const { note } = props;
 
     const classNameForCount: (cnt: Count) => string = (cnt: Count): string => {
       return cn(
-        note === cnt &&
-          (this.props.editType === "N" || this.props.editType === "R")
+        note === cnt && (props.editType === "N" || props.editType === "R")
           ? styles.paletteBtnOn
           : styles.paletteBtnOff,
       );
@@ -469,7 +420,7 @@ export default class NotePalette extends React.Component<Props> {
         <ul className={cn(styles.controls)}>
           <a
             href="#"
-            onClick={this.setNote32}
+            onClick={setNote32}
             className={classNameForCount(Count._32nd)}
             role="button"
           >
@@ -479,7 +430,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={this.setNote16}
+            onClick={setNote16}
             className={classNameForCount(Count._16th)}
             role="button"
           >
@@ -489,7 +440,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={this.setNote8}
+            onClick={setNote8}
             className={classNameForCount(Count.Eighth)}
             role="button"
           >
@@ -501,7 +452,7 @@ export default class NotePalette extends React.Component<Props> {
         <ul className={cn(styles.controls)}>
           <a
             href="#"
-            onClick={this.setNote4}
+            onClick={setNote4}
             className={classNameForCount(Count.Quarter)}
             role="button"
           >
@@ -511,7 +462,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={this.setNote2}
+            onClick={setNote2}
             className={classNameForCount(Count.Half)}
             role="button"
           >
@@ -521,7 +472,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={this.setNote1}
+            onClick={setNote1}
             className={classNameForCount(Count.Whole)}
             role="button"
           >
@@ -534,48 +485,44 @@ export default class NotePalette extends React.Component<Props> {
     );
   }
 
-  private renderDynamics(): JSX.Element {
-    const { direction, editType, setDirection } = this.props;
+  function renderDynamics() {
+    const { direction, editType, setDirection } = props;
 
     if (editType !== "P") {
       return null;
     }
 
-    const rows: JSX.Element[] = chunk(dynamics, 3).map(
-      (row: Direction[], idx: number) => {
-        const columns: JSX.Element[] = row.map(
-          (model: Direction, jdx: number): JSX.Element => {
-            const className: string = cn(
-              isEqual(direction, model)
-                ? styles.paletteBtnOn
-                : styles.paletteBtnOff,
-            );
-            const layout: { model: Direction; overrideX?: number } = {
-              model,
-              overrideX: 0,
-            };
-
-            return (
-              <a
-                href="#"
-                onClick={(): void => setDirection(model)}
-                key={jdx}
-                className={className}
-                role="button"
-              >
-                <SatieAddons.Direction layout={layout} />
-              </a>
-            );
-          },
+    const rows = chunk(dynamics, 3).map((row: Direction[], idx: number) => {
+      const columns = row.map((model: Direction, jdx: number) => {
+        const className: string = cn(
+          isEqual(direction, model)
+            ? styles.paletteBtnOn
+            : styles.paletteBtnOff,
         );
+        const layout: { model: Direction; overrideX?: number } = {
+          model,
+          overrideX: 0,
+        };
 
         return (
-          <ul className={cn(styles.controls)} key={idx}>
-            {columns}
-          </ul>
+          <a
+            href="#"
+            onClick={(): void => setDirection(model)}
+            key={jdx}
+            className={className}
+            role="button"
+          >
+            <SatieAddons.Direction layout={layout} />
+          </a>
         );
-      },
-    );
+      });
+
+      return (
+        <ul className={cn(styles.controls)} key={idx}>
+          {columns}
+        </ul>
+      );
+    });
 
     return (
       <span className={cn(styles.subsection)}>
@@ -585,23 +532,20 @@ export default class NotePalette extends React.Component<Props> {
     );
   }
 
-  private renderModifiers(): JSX.Element {
-    const { dots, timeModification } = this.props;
+  function renderModifiers() {
+    const { dots, timeModification } = props;
 
     const timeModificationTupletClassName: string = cn(
       timeModification ? styles.paletteBtnOn : styles.paletteBtnOff,
     );
 
-    const dotEl: JSX.Element[] = times(
-      dots || 1,
-      (idx: number): JSX.Element => {
-        return (
-          <span style={{ marginLeft: 3, display: "inline-block" }} key={idx}>
-            {"\ue1e7"}
-          </span>
-        );
-      },
-    );
+    const dotEl = times(dots || 1, (idx: number) => {
+      return (
+        <span style={{ marginLeft: 3, display: "inline-block" }} key={idx}>
+          {"\ue1e7"}
+        </span>
+      );
+    });
 
     return (
       <span className={cn(styles.subsection)}>
@@ -609,7 +553,7 @@ export default class NotePalette extends React.Component<Props> {
         <ul className={cn(styles.controls)}>
           <a
             href="#"
-            onClick={this.toggleDots}
+            onClick={toggleDots}
             className={
               dots ? cn(styles.paletteBtnOn) : cn(styles.paletteBtnOff)
             }
@@ -624,7 +568,7 @@ export default class NotePalette extends React.Component<Props> {
           </a>
           <a
             href="#"
-            onClick={this.toggleTuplet}
+            onClick={toggleTuplet}
             className={timeModificationTupletClassName}
             role="button"
           >
@@ -637,14 +581,12 @@ export default class NotePalette extends React.Component<Props> {
     );
   }
 
-  private renderSecondRow(): JSX.Element {
-    if (this.props.editType === "P") {
+  function renderSecondRow() {
+    if (props.editType === "P") {
       return (
         <span>
-          <div className={cn(styles.controlRow)}>{this.renderDynamics()}</div>
-          <div className={cn(styles.controlRow)}>
-            {this.renderArticulations()}
-          </div>
+          <div className={cn(styles.controlRow)}>{renderDynamics()}</div>
+          <div className={cn(styles.controlRow)}>{renderArticulations()}</div>
         </span>
       );
     }
@@ -652,28 +594,73 @@ export default class NotePalette extends React.Component<Props> {
     return null;
   }
 
-  private setAccidentalF: () => void = () =>
-    this.props.setAccidental(MxmlAccidental.Flat);
-  private setAccidentalNone: () => void = () =>
-    this.props.setAccidental(MxmlAccidental.Natural);
-  private setAccidentalS: () => void = () =>
-    this.props.setAccidental(MxmlAccidental.Sharp);
-  private setNote1: () => void = () => this.props.setNote(Count.Whole);
-  private setNote16: () => void = () => this.props.setNote(Count._16th);
-  private setNote2: () => void = () => this.props.setNote(Count.Half);
-  private setNote32: () => void = () => this.props.setNote(Count._32nd);
-  private setNote4: () => void = () => this.props.setNote(Count.Quarter);
-  private setNote8: () => void = () => this.props.setNote(Count.Eighth);
-  private setTypeN: () => void = () => this.props.setEditType("N");
-  private setTypeP: () => void = () => this.props.setEditType("P");
-  private setTypeR: () => void = () => this.props.setEditType("R");
-  private toggleDots: () => void = () =>
-    this.props.setDots(((this.props.dots || 0) + 1) % 4);
-  private toggleTuplet: () => void = () => {
-    this.props.setTimeModification(
-      this.props.timeModification ? null : { actualNotes: 3, normalNotes: 2 },
+  const setAccidentalF: () => void = () =>
+    props.setAccidental(MxmlAccidental.Flat);
+
+  const setAccidentalNone: () => void = () =>
+    props.setAccidental(MxmlAccidental.Natural);
+
+  const setAccidentalS: () => void = () =>
+    props.setAccidental(MxmlAccidental.Sharp);
+
+  const setNote1: () => void = () => props.setNote(Count.Whole);
+
+  const setNote16: () => void = () => props.setNote(Count._16th);
+
+  const setNote2: () => void = () => props.setNote(Count.Half);
+
+  const setNote32: () => void = () => props.setNote(Count._32nd);
+
+  const setNote4: () => void = () => props.setNote(Count.Quarter);
+
+  const setNote8: () => void = () => props.setNote(Count.Eighth);
+
+  const setTypeN: () => void = () => props.setEditType("N");
+
+  const setTypeP: () => void = () => props.setEditType("P");
+
+  const setTypeR: () => void = () => props.setEditType("R");
+
+  const toggleDots: () => void = () =>
+    props.setDots(((props.dots || 0) + 1) % 4);
+
+  const toggleTuplet: () => void = () => {
+    props.setTimeModification(
+      props.timeModification ? null : { actualNotes: 3, normalNotes: 2 },
     );
   };
+
+  const cls: string = cn(
+    styles.paletteSml,
+    styles.paletteBtnOff,
+    styles.paletteTxt,
+  );
+
+  return (
+    <div className={cn(styles.controlWidget)}>
+      {renderSecondRow()}
+      <div className={cn(styles.controlRow)}>
+        {renderDuration()}
+        {renderModifiers()}
+        {renderAccidentals()}
+        <div className={cn(styles.spring)} />
+        <ul className={cn(styles.controls)}>
+          <div className={cn(styles.controlSeperator)} />
+          <a href="#" onClick={props.undo} className={cls} role="button">
+            <Undo />
+          </a>
+          <div className={cn(styles.controlSeperator)} />
+          <a href="#" onClick={props.redo} className={cls} role="button">
+            <Redo />
+          </a>
+          <div className={cn(styles.controlSeperator)} />
+          <a href="#" onClick={props.newMeasure} className={cls} role="button">
+            <Plus /> Add Bar
+          </a>
+        </ul>
+      </div>
+    </div>
+  );
 }
 
 const styles = {
@@ -695,3 +682,5 @@ const styles = {
   spring: "flex-1",
   subsection: "flex",
 } as const;
+
+export default memo(NotePalette, isEqual);

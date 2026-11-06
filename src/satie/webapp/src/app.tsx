@@ -1,7 +1,6 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
-import * as React from "react";
 
-import * as STYLES from "./app.css";
+import STYLES from "./app.module.css";
 
 export default function App() {
   const { pathname } = useLocation();

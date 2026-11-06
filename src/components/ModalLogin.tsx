@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
+import { useEffect } from "react";
 
 import {
   Dialog,
@@ -31,90 +31,84 @@ interface Props {
  * The user is redirected back to the app after the flow. <App /> then calls
  * checkLogin, below, to set localStorage.
  */
-export default class ModalLogin extends React.PureComponent<Props> {
-  componentDidMount(): void {
+export default function ModalLogin({ setCSRF, ...props }: Props) {
+  useEffect(() => {
     const randomContainer = new Uint32Array(1);
     crypto.getRandomValues(randomContainer);
-    const csrf: string = randomContainer[0].toString();
+    setCSRF(randomContainer[0].toString());
+  }, [setCSRF]);
 
-    this.props.setCSRF(csrf);
-  }
+  const { csrf, onHide } = props;
 
-  render(): JSX.Element {
-    const { csrf, onHide } = this.props;
-
-    if (!CLIENT_ID) {
-      return (
-        <Dialog open={true} onOpenChange={(open) => !open && onHide()}>
-          <DialogContent>
-            <div>
-              GitHub integration is not enabled in this copy of Hacklily since
-              the <code>REACT_APP_GITHUB_CLIENT_ID</code> environment variable
-              was not set when bundling the application.
-            </div>
-          </DialogContent>
-        </Dialog>
-      );
-    }
-
+  if (!CLIENT_ID) {
     return (
-      <Dialog open={true} onOpenChange={(open) => !open && onHide()}>
+      <Dialog open onOpenChange={(open) => !open && onHide()}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Sign in to continue</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <p className="leading-relaxed">
-              <span className="font-bold">
-                Hacklily is the home for beautiful sheet music. It&apos;s 100%
-                free.
-              </span>{" "}
-              Sign in now to manage your sheet music library.
-            </p>
-            <p className="leading-relaxed">
-              Save songs to your Hacklily library to access them anywhere and
-              share them with others.
-            </p>
-            <p className="leading-relaxed">
-              Songs you save will be <strong>public</strong> on GitHub and
-              Hacklily. If you do not have a{" "}
-              <a
-                href="https://help.github.com/articles/github-glossary/#repository"
-                className="underline cursor-pointer text-blue-500"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                repo
-              </a>{" "}
-              named <strong>sheet-music</strong>, Hacklily will create one.
-            </p>
-            <div className="mt-4 w-full text-center">
-              <a href={getOauthRedirect(csrf)} className="cursor-pointer">
-                <button className="bg-[#2a2a2a] bg-[url('./github.svg')] bg-[length:2em] bg-[position:1em] bg-no-repeat border-none rounded-[0.5em] text-white cursor-pointer text-[1em] h-[4em] leading-[1em] px-[2em] pl-[4em] no-underline transition-all duration-500 w-[262px] hover:bg-[#444444] active:bg-[#101010]">
-                  Continue with GitHub
-                </button>
-              </a>
-            </div>
-            <p
-              className={cn("text-muted-foreground", "mt-4 -mb-4 text-xs pb-4")}
-            >
-              Only save songs you want to share. See the{" "}
-              <a
-                href="privacy-statement.html"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                privacy statement
-              </a>{" "}
-              and{" "}
-              <a href="dmca.html" target="_blank" rel="noopener noreferrer">
-                DMCA policy
-              </a>
-              .
-            </p>
+          <div>
+            GitHub integration is not enabled in this copy of Hacklily since the{" "}
+            <code>REACT_APP_GITHUB_CLIENT_ID</code> environment variable was not
+            set when bundling the application.
           </div>
         </DialogContent>
       </Dialog>
     );
   }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onHide()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Sign in to continue</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <p className="leading-relaxed">
+            <span className="font-bold">
+              Hacklily is the home for beautiful sheet music. It&apos;s 100%
+              free.
+            </span>{" "}
+            Sign in now to manage your sheet music library.
+          </p>
+          <p className="leading-relaxed">
+            Save songs to your Hacklily library to access them anywhere and
+            share them with others.
+          </p>
+          <p className="leading-relaxed">
+            Songs you save will be <strong>public</strong> on GitHub and
+            Hacklily. If you do not have a{" "}
+            <a
+              href="https://help.github.com/articles/github-glossary/#repository"
+              className="underline cursor-pointer text-blue-500"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              repo
+            </a>{" "}
+            named <strong>sheet-music</strong>, Hacklily will create one.
+          </p>
+          <div className="mt-4 w-full text-center">
+            <a href={getOauthRedirect(csrf)} className="cursor-pointer">
+              <button className="bg-[#2a2a2a] bg-[url('./github.svg')] bg-[length:2em] bg-[position:1em] bg-no-repeat border-none rounded-[0.5em] text-white cursor-pointer text-[1em] h-[4em] leading-[1em] px-[2em] pl-[4em] no-underline transition-all duration-500 w-[262px] hover:bg-[#444444] active:bg-[#101010]">
+                Continue with GitHub
+              </button>
+            </a>
+          </div>
+          <p className={cn("text-muted-foreground", "mt-4 -mb-4 text-xs pb-4")}>
+            Only save songs you want to share. See the{" "}
+            <a
+              href="privacy-statement.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              privacy statement
+            </a>{" "}
+            and{" "}
+            <a href="dmca.html" target="_blank" rel="noopener noreferrer">
+              DMCA policy
+            </a>
+            .
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }

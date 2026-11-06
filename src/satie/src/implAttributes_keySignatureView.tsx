@@ -3,11 +3,9 @@
 
 /* eslint-disable @typescript-eslint/prefer-for-of */
 
-import { times, map } from "lodash";
-import * as React from "react";
-import type { FC } from "react";
+import { map, times } from "lodash";
 
-import type { Key, Clef, Accidental } from "#/musicxml-interfaces";
+import type { Accidental, Clef, Key } from "#/musicxml-interfaces";
 import { MxmlAccidental } from "#/musicxml-interfaces";
 
 import AccidentalView from "./implAttributes_accidentalView";
@@ -34,7 +32,7 @@ const flats: { [key: string]: Array<number> } = {
 /**
  * Renders a key signature.
  */
-const KeyView: FC<{ spec: Key; clef: Clef }> = (props) => {
+const KeyView = (props: { spec: Key; clef: Clef }) => {
   const { spec, clef } = props;
 
   /**

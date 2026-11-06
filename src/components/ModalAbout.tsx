@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
+import { memo } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -19,9 +19,9 @@ interface Props {
 /**
  * The About dialog, accessible through the menu in the header.
  */
-const ModalAbout: React.FC<Props> = React.memo(function ModalAbout(props) {
+const ModalAbout = memo(function ModalAbout(props: Props) {
   return (
-    <Dialog open={true} onOpenChange={(open) => !open && props.onHide()}>
+    <Dialog open onOpenChange={(open) => !open && props.onHide()}>
       <DialogContent className="sm:max-w-[565px]">
         <DialogHeader>
           <DialogTitle>About Hacklily</DialogTitle>
@@ -172,7 +172,7 @@ const ModalAbout: React.FC<Props> = React.memo(function ModalAbout(props) {
   );
 });
 
-function renderLilyPondVersions(): JSX.Element | null {
+function renderLilyPondVersions() {
   const stable: string | undefined =
     process.env.REACT_APP_STABLE_LILYPOND_VERSION;
   const unstable: string | undefined =

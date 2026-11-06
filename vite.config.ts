@@ -28,8 +28,11 @@ import monacoEditorPlugin from "vite-plugin-monaco-editor-esm";
  */
 function lilypondWasmPlugin(): Plugin {
   const pkgDir = process.env.LILYPOND_WASM_DIR
-    ? path.resolve(__dirname, process.env.LILYPOND_WASM_DIR)
-    : path.resolve(__dirname, "node_modules/@jocelyn-stericker/lilypond-wasm");
+    ? path.resolve(import.meta.dirname, process.env.LILYPOND_WASM_DIR)
+    : path.resolve(
+        import.meta.dirname,
+        "node_modules/@jocelyn-stericker/lilypond-wasm",
+      );
   const files = [
     "lily-worker.js",
     "lilypond-web.js",
@@ -83,7 +86,7 @@ function lilypondWasmPlugin(): Plugin {
       server.middlewares.use((req, res, next) => serve(req, res, next));
     },
     closeBundle: () => {
-      const outDir = path.resolve(__dirname, "dist/wasm");
+      const outDir = path.resolve(import.meta.dirname, "dist/wasm");
       fs.mkdirSync(outDir, { recursive: true });
       for (const f of files) {
         fs.copyFileSync(path.join(pkgDir, f), path.join(outDir, f));
@@ -94,7 +97,7 @@ function lilypondWasmPlugin(): Plugin {
 
 function readLilyPondVersion(dockerfilePath: string): string {
   const content = fs.readFileSync(
-    path.resolve(__dirname, dockerfilePath),
+    path.resolve(import.meta.dirname, dockerfilePath),
     "utf8",
   );
   const match = content.match(/^ARG LILYPOND_VERSION=(.+)/m);
@@ -106,6 +109,15 @@ function readLilyPondVersion(dockerfilePath: string): string {
 
 export default defineConfig({
   publicDir: "static",
+  resolve: {
+    alias: [
+      {
+        // react-monaco-editor still imports the legacy package layout.
+        find: /^monaco-editor\/esm\/vs\/editor\/editor\.api$/,
+        replacement: "monaco-editor/editor/editor.api",
+      },
+    ],
+  },
   build: {
     rollupOptions: {
       input: {
@@ -144,7 +156,13 @@ export default defineConfig({
     tailwindcss(),
     react(),
     monacoEditorPlugin({
-      languageWorkers: ["editorWorkerService"],
+      languageWorkers: [],
+      customWorkers: [
+        {
+          label: "editorWorkerService",
+          entry: "monaco-editor/editor/editor.worker",
+        },
+      ],
     }),
     lilypondWasmPlugin(),
   ],

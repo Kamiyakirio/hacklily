@@ -4,11 +4,9 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import * as React from "react";
 import { createRoot } from "react-dom/client";
 
-// @ts-ignore: TS2307 - path alias not configured in this tsconfig
-import ErrorBoundary from "#/ErrorBoundary";
+import ErrorBoundary from "#/components/ErrorBoundary";
 
 import App from "./app";
 import Home from "./home";
@@ -35,8 +33,7 @@ const testsIdRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tests/$id",
   component: function TestsWithId() {
-    const TestsComponent = Tests as React.FC<{ testId?: string }>;
-    return <TestsComponent />;
+    return <Tests />;
   },
 });
 
@@ -65,7 +62,9 @@ declare module "@tanstack/react-router" {
   }
 }
 
-const root = createRoot(document.getElementById("root")!);
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("Root element not found");
+const root = createRoot(rootElement);
 
 root.render(
   <ErrorBoundary>

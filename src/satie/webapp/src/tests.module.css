@@ -1,6 +1,6 @@
 @import "./common.css";
 
-:local(.tests) {
+.tests {
   margin-top: 20px;
 }
 

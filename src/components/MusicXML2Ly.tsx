@@ -1,127 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
-
-/* eslint-disable import/first */
-
-const INITIAL_WS_COOLOFF = 2;
-const BACKEND_WS_URL: string | undefined = process.env.REACT_APP_BACKEND_WS_URL;
+import { useRpcConnection } from "#/lib/useRpcConnection";
 
 import "../index.css";
-import RPCClient from "#/lib/RPCClient";
-
 import MusicXML2LyModal from "./MusicXML2LyModal";
 
-interface State {
-  wsError: boolean;
-  reconnectCooloff: number;
-  reconnectTimeout: number;
+function leave() {
+  window.location.href = "/";
 }
 
-export default class App extends React.PureComponent<{}, State> {
-  state: State = {
-    reconnectCooloff: INITIAL_WS_COOLOFF,
-    reconnectTimeout: NaN,
-    wsError: false,
-  };
-
-  private rpc: RPCClient | null = null;
-  private socket: WebSocket | null = null;
-
-  componentDidMount(): void {
-    this.connectToWS();
-  }
-
-  componentWillUnmount(): void {
-    this.disconnectWS();
-  }
-
-  render(): JSX.Element {
-    const header = <div className="header" />;
-
-    return (
-      <div className="App">
-        {header}
-        {this.rpc && <MusicXML2LyModal onHide={this.onLeave} rpc={this.rpc} />}
-        <div className="content" style={{ width: "50%" }}>
-          <div className="monaco" />
-        </div>
+export default function MusicXML2Ly() {
+  const { rpc } = useRpcConnection(process.env.REACT_APP_BACKEND_WS_URL, 2);
+  return (
+    <div className="App">
+      <div className="header" />
+      {rpc && <MusicXML2LyModal onHide={leave} rpc={rpc} />}
+      <div className="content" style={{ width: "50%" }}>
+        <div className="monaco" />
       </div>
-    );
-  }
-
-  onLeave = (): void => {
-    window.location.href = "/";
-  };
-
-  private connectToWS(): void {
-    if (!BACKEND_WS_URL) {
-      this.setState({
-        wsError: true,
-      });
-
-      return;
-    }
-    this.socket = new WebSocket(BACKEND_WS_URL);
-
-    this.socket.addEventListener("open", this.handleWSOpen);
-    this.socket.addEventListener("error", this.handleWSError);
-    this.socket.addEventListener("close", this.handleWSError);
-    this.forceUpdate();
-  }
-
-  private disconnectWS(): void {
-    if (this.socket) {
-      this.socket.removeEventListener("open", this.handleWSOpen);
-      this.socket.removeEventListener("error", this.handleWSError);
-      this.socket.removeEventListener("close", this.handleWSError);
-      this.socket.close();
-      this.socket = null;
-      if (this.rpc) {
-        this.rpc.destroy();
-        this.rpc = null;
-      }
-    }
-  }
-
-  private handleWSError = (_e: Event): void => {
-    if (!this.socket) {
-      return;
-    }
-
-    this.disconnectWS();
-    this.setState({
-      reconnectCooloff: this.state.reconnectCooloff * 2,
-      reconnectTimeout: this.state.reconnectCooloff,
-      wsError: true,
-    });
-    setTimeout(this.wsReconnectTick, 1000);
-  };
-
-  private handleWSOpen = async (): Promise<void> => {
-    if (!this.socket) {
-      throw new Error("Socket not opened, but handleWSOpen called.");
-    }
-    this.rpc = new RPCClient(this.socket);
-    this.setState({
-      reconnectCooloff: INITIAL_WS_COOLOFF,
-    });
-    this.forceUpdate();
-  };
-
-  private wsReconnectTick = (): void => {
-    const secondsRemaining: number = this.state.reconnectTimeout - 1;
-    if (secondsRemaining > 0) {
-      this.setState({
-        reconnectTimeout: secondsRemaining,
-      });
-      setTimeout(this.wsReconnectTick, 1000);
-    } else {
-      this.setState({
-        reconnectTimeout: NaN,
-      });
-      this.connectToWS();
-    }
-  };
+    </div>
+  );
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
+import { memo } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -22,9 +22,9 @@ interface Props {
  * 404.html (which GitHub pages will render for every unmatched URL) redirects to
  * '/?404=1', which renders <App 404="1" />, which results in this modal being shown.
  */
-const Modal404: React.FC<Props> = React.memo(function Modal404(props) {
+const Modal404 = memo(function Modal404(props: Props) {
   return (
-    <Dialog open={true} onOpenChange={(open) => !open && props.onHide()}>
+    <Dialog open onOpenChange={(open) => !open && props.onHide()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Page not found</DialogTitle>

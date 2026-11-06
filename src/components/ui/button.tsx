@@ -1,7 +1,7 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
-import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
-import React from "react";
+import { cva } from "class-variance-authority";
+import type { ComponentProps } from "react";
 
 import { cn } from "#/lib/utils.ts";
 
@@ -42,28 +42,22 @@ const buttonVariants = cva(
   },
 );
 
-// `forwardRef` is required (not just nice-to-have): base-ui's `render` prop
-// (e.g. `<DropdownMenuTrigger render={<Button />}>`) clones this element and
-// sets a `ref` so it can register the trigger's DOM node as Floating UI's
-// positioning anchor. On React 18 a plain function component silently drops
-// that `ref`, so the anchor is never registered and the positioned popup is
-// stuck at 0,0 with opacity:0. Forwarding the ref onto ButtonPrimitive (which is
-// itself a forwardRef) keeps positioning working.
-const Button = React.forwardRef<
-  HTMLElement,
-  ButtonPrimitive.Props & VariantProps<typeof buttonVariants>
->(function Button(
-  { className, variant = "default", size = "default", ...props },
-  ref,
-) {
+type ButtonProps = ComponentProps<typeof ButtonPrimitive> &
+  VariantProps<typeof buttonVariants>;
+
+function Button({
+  className,
+  variant = "default",
+  size = "default",
+  ...props
+}: ButtonProps) {
   return (
     <ButtonPrimitive
-      ref={ref}
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />
   );
-});
+}
 
 export { Button, buttonVariants };

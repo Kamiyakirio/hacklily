@@ -2,7 +2,7 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import { AlertTriangleIcon, InfoIcon } from "lucide-react";
-import React from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -27,16 +27,16 @@ interface Props {
  *
  * This is visible in the app whenever the preview is visible.
  */
-const Logs: React.FC<Props> = (props) => {
+const Logs = (props: Props) => {
   const { logs, loading } = props;
 
-  const [showLogDrawer, setShowLogDrawer] = React.useState<boolean>(false);
+  const [showLogDrawer, setShowLogDrawer] = useState<boolean>(false);
 
-  const handleClose = React.useCallback(() => {
+  const handleClose = useCallback(() => {
     setShowLogDrawer(false);
   }, []);
 
-  const handleOpen = React.useCallback(() => {
+  const handleOpen = useCallback(() => {
     setShowLogDrawer(true);
   }, []);
 

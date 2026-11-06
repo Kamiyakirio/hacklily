@@ -13,7 +13,7 @@ import {
   Music,
   Save,
 } from "lucide-react";
-import React from "react";
+import { memo } from "react";
 
 import {
   DropdownMenuItem,
@@ -49,7 +49,7 @@ interface Props {
  * Renders the File menu.
  * The menu button is rendered by <Header />
  */
-const FileMenu: React.FC<Props> = React.memo(function FileMenu(props) {
+const FileMenu = memo(function FileMenu(props: Props) {
   const {
     auth,
     canCreateNew,
@@ -68,17 +68,14 @@ const FileMenu: React.FC<Props> = React.memo(function FileMenu(props) {
     songURL,
   } = props;
 
-  let signOut: React.ReactNode;
-  if (auth) {
-    signOut = (
-      <DropdownMenuItem onClick={onSignOut}>
-        <LogOut size="1em" className="inline" />
-        Sign out
-      </DropdownMenuItem>
-    );
-  }
+  const signOut = auth ? (
+    <DropdownMenuItem onClick={onSignOut}>
+      <LogOut size="1em" className="inline" />
+      Sign out
+    </DropdownMenuItem>
+  ) : null;
 
-  const tutorial: React.ReactNode = (
+  const tutorial = (
     <DropdownMenuItem
       onClick={() =>
         window.open(
@@ -96,7 +93,7 @@ const FileMenu: React.FC<Props> = React.memo(function FileMenu(props) {
     </DropdownMenuItem>
   );
 
-  const about: React.ReactNode = (
+  const about = (
     <DropdownMenuItem onClick={onShowAbout}>About Hacklily</DropdownMenuItem>
   );
 

@@ -2,22 +2,14 @@
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import invariant from "invariant";
-import { isEqual, sortedIndex, indexOf } from "lodash";
-import type { Component, ComponentLifecycle } from "react";
+import { sortedIndex, indexOf } from "lodash";
+import { useLayoutEffect } from "react";
 
 import type { ILayout } from "./document";
 
 export interface IBaseProps {
   layout: ILayout;
   originX: number;
-}
-
-export interface IMetaComponent<P, S>
-  extends Component<P, S>, ComponentLifecycle<P, S> {
-  context: {
-    originYByPartAndStaff: { [key: string]: number[] };
-  };
-  _record?: IRecord;
 }
 
 export interface ILookup {
@@ -35,106 +27,26 @@ export interface IRecord {
   originY: number;
 }
 
-/**
- * A decorator that records the position of a component.
- */
-export function Targetable<P extends IBaseProps, S>() {
-  return function decorator(component: { prototype: IMetaComponent<P, S> }) {
-    function updateMeta(self: IMetaComponent<P, S>, props: P) {
-      const layout = props.layout;
-
-      const originX: number = props.originX;
-      const originY =
-        self.context.originYByPartAndStaff[layout.part][
-          layout.model.staffIdx || 1
-        ] || 0;
-
-      const newRecord: IRecord = {
-        key: props.layout.key,
-        obj: self,
-        x1: originX + props.layout.x - 2,
-        x2: originX + props.layout.x + props.layout.renderedWidth,
-        y1: originY - 60,
-        y2: originY + 60,
-        originY,
-      };
-
-      if (self._record) {
-        if (isEqual(newRecord, self._record)) {
-          return;
-        }
-
-        clearMeta(self);
-      }
-      if (isNaN(props.layout.renderedWidth)) {
-        console.warn("Missing rendered width in", props.layout.key);
-        return;
-      }
-
-      self._record = {
-        key: props.layout.key,
-        obj: self,
-        x1: originX + props.layout.x - 2,
-        x2: originX + props.layout.x + props.layout.renderedWidth,
-        y1: originY - 60,
-        y2: originY + 60,
-        originY,
-      };
-
-      set(self._record);
+/** Register committed score elements for mouse hit testing. */
+export function useTargetable(props: IBaseProps, originY: number) {
+  useLayoutEffect(() => {
+    const { layout, originX } = props;
+    if (isNaN(layout.renderedWidth)) {
+      console.warn("Missing rendered width in", layout.key);
+      return;
     }
-
-    function clearMeta(self: IMetaComponent<P, S>) {
-      clear(self._record);
-      self._record = null;
-    }
-
-    // ---- //
-
-    const originalComponentWillMount =
-      component.prototype.UNSAFE_componentWillMount; // eslint-disable-line @typescript-eslint/unbound-method
-
-    component.prototype.UNSAFE_componentWillMount =
-      function metaComponentWillMountWrapper() {
-        const self = this as IMetaComponent<P, S>;
-        updateMeta(self, self.props);
-
-        if (originalComponentWillMount) {
-          originalComponentWillMount.call(self);
-        }
-      };
-
-    // ---- //
-
-    const originalComponentWillUnmount =
-      component.prototype.componentWillUnmount; // eslint-disable-line @typescript-eslint/unbound-method
-
-    component.prototype.componentWillUnmount =
-      function metaComponentWillUnmountWrapper() {
-        const self = this as IMetaComponent<P, S>;
-        clearMeta(self);
-
-        if (originalComponentWillUnmount) {
-          originalComponentWillUnmount.call(self);
-        }
-      };
-
-    // ---- //
-
-    const originalComponentWillReceiveProps =
-      component.prototype.UNSAFE_componentWillReceiveProps; // eslint-disable-line @typescript-eslint/unbound-method
-
-    component.prototype.UNSAFE_componentWillReceiveProps =
-      function metaComponentWillReceiveProps(nextProps: P) {
-        const self = this as IMetaComponent<P, S>;
-
-        updateMeta(self, nextProps);
-
-        if (originalComponentWillReceiveProps) {
-          originalComponentWillReceiveProps.call(self);
-        }
-      };
-  };
+    const record: IRecord = {
+      key: layout.key,
+      obj: { props },
+      x1: originX + layout.x - 2,
+      x2: originX + layout.x + layout.renderedWidth,
+      y1: originY - 60,
+      y2: originY + 60,
+      originY,
+    };
+    set(record);
+    return () => clear(record);
+  }, [props, originY]);
 }
 
 const _sorted: IRecord[] = [];

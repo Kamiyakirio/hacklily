@@ -4,9 +4,8 @@
 /* eslint-disable no-shadow */
 
 import invariant from "invariant";
-import { forEach, isEqual, throttle, find, extend } from "lodash";
-import { Component, createElement } from "react";
-import type { SyntheticEvent, ReactElement } from "react";
+import { find, forEach, isEqual, throttle } from "lodash";
+import type { ReactElement, SyntheticEvent } from "react";
 
 import type { Pitch, ScoreHeader } from "#/musicxml-interfaces";
 import type { IAny } from "#/musicxml-interfaces/operations";
@@ -14,10 +13,10 @@ import { invert } from "#/musicxml-interfaces/operations";
 
 import type {
   Document,
-  ISong,
+  IMouseEvent,
   IPatchSpec,
   IProps,
-  IMouseEvent,
+  ISong,
 } from "./document";
 import { specIsDocBuilder, specIsPartBuilder, specIsRaw } from "./document";
 import applyOp from "./engine_applyOp";
@@ -39,80 +38,67 @@ export interface IState {
   factory?: IFactory;
 }
 
-/**
- * Represents a song as:
- *  - some MusicXML, as a string
- *  - a series of patches applied on top of the MusicXML.
- *
- * The class can be used:
- *  - as a React component, to render to the DOM.
- *  - as a simple class (in this case call song.run() to load or update the document) to
- *    export to MusicXML (toMusicXML()) or SVG (toSVG()).
- *
- * Note: toMusicXML and toSVG can also be used when Song is used as a React component
- * (e.g., <Song ... ref={song => console.log(song.toMusicXML())} />)
- */
-export default class SongImpl
-  extends Component<IProps, IState>
-  implements ISong
-{
+/** MusicXML document controller, usable by both React views and headless exports. */
+export default class SongImpl implements ISong {
+  constructor(public props: IProps) {}
+
+  private previousProps: IProps | null = null;
+  private listeners = new Set<() => void>();
+  private revision = 0;
+  private loadGeneration = 0;
+
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  getSnapshot = () => this.revision;
+  getPage = () => this._page1;
+
+  private notify() {
+    this.revision += 1;
+    this.listeners.forEach((listener) => listener());
+  }
+
+  update(props: IProps) {
+    const previous = this.previousProps;
+    this.props = props;
+    this.previousProps = props;
+    if (!previous || previous.baseSrc !== props.baseSrc) {
+      this._loadXML(props.baseSrc);
+    } else if (
+      this.state.document &&
+      (previous.patches !== props.patches ||
+        previous.pageClassName !== props.pageClassName ||
+        previous.fixedMeasureWidth !== props.fixedMeasureWidth ||
+        previous.singleLineMode !== props.singleLineMode)
+    ) {
+      this._preRender(props);
+    }
+  }
+
+  run() {
+    this.update(this.props);
+  }
+
+  dispose() {
+    this.loadGeneration += 1;
+    this.previousProps = null;
+    this._handleCursorPosition.cancel();
+  }
+
   state: IState = {
     document: null,
     factory: null,
   };
 
   private _docPatches: IAny[] = [];
-  private _isRunningWithoutDOM: boolean;
+
   private _page1: ReactElement<any> = null;
   private _pt: SVGPoint;
   private _svg: SVGSVGElement;
-
-  render(): ReactElement<any> {
-    // Note: we rectify/render before this is called. We assume shouldComponentUpdate
-    // stops temporary states from being rendered.
-    return createElement(
-      "div",
-      {
-        onMouseMove: this.props.onMouseMove && this._handleMouseMove,
-        onClick: this.props.onMouseClick && this._handleClick,
-      } as any,
-      this._page1,
-    );
-  }
-
-  shouldComponentUpdate(nextProps: IProps) {
-    return (
-      nextProps.baseSrc !== this.props.baseSrc ||
-      nextProps.patches !== this.props.patches ||
-      nextProps.pageClassName !== this.props.pageClassName ||
-      nextProps.singleLineMode !== this.props.singleLineMode ||
-      nextProps.fixedMeasureWidth !== this.props.fixedMeasureWidth
-    );
-  }
-
-  UNSAFE_componentWillReceiveProps(nextProps: IProps) {
-    if (nextProps.baseSrc !== this.props.baseSrc) {
-      this._loadXML(nextProps.baseSrc);
-    } else if (
-      nextProps.pageClassName !== this.props.pageClassName ||
-      nextProps.fixedMeasureWidth !== this.props.fixedMeasureWidth ||
-      nextProps.singleLineMode !== this.props.singleLineMode
-    ) {
-      this._preRender(nextProps);
-    } else if (nextProps.patches !== this.props.patches) {
-      const patches = nextProps.patches;
-      if (patches instanceof PatchImpl) {
-        this._update$(patches.content, patches.isPreview);
-      } else if (!patches) {
-        this._update$([], false);
-      } else {
-        throw new Error("Invalid patch.");
-      }
-    }
-  }
-  UNSAFE_componentWillMount() {
-    this._loadXML(this.props.baseSrc);
-  }
 
   /**
    * Returns the document represented by the song. The document represents the
@@ -220,23 +206,6 @@ export default class SongImpl
     }
     return exportXML(this.state.document);
   };
-
-  run() {
-    this.setState = (state: any, cb: () => void) => {
-      extend(this.state, state);
-      if (cb) {
-        cb();
-      }
-    };
-    this.forceUpdate = () => {
-      // no-op
-    };
-    if (!this._isRunningWithoutDOM) {
-      this.UNSAFE_componentWillMount();
-    }
-    this._isRunningWithoutDOM = true;
-    this.UNSAFE_componentWillReceiveProps(this.props);
-  }
 
   private _createPatch(isPreview: boolean, patchSpecs: IPatchSpec[]) {
     const patches: IAny[] = patchSpecs.reduce((array, spec) => {
@@ -359,7 +328,7 @@ export default class SongImpl
       this._syncSVG,
       props.onPageHeightChanged,
     );
-    this.forceUpdate();
+    this.notify();
   }
 
   private _preRender = (props: IProps = this.props) => {
@@ -381,7 +350,7 @@ export default class SongImpl
   };
 
   private _getPos(ev: SyntheticEvent<Node>) {
-    if (!this._svg.contains(ev.target as Node)) {
+    if (!this._svg || !this._pt || !this._svg.contains(ev.target as Node)) {
       return null;
     }
 
@@ -434,14 +403,14 @@ export default class SongImpl
     18,
   );
 
-  private _handleMouseMove = (ev: SyntheticEvent<Node>) => {
+  handleMouseMove = (ev: SyntheticEvent<Node>) => {
     const p = this._getPos(ev);
     if (p) {
       this._handleCursorPosition(p, this.props.onMouseMove);
     }
   };
 
-  private _handleClick = (ev: any) => {
+  handleClick = (ev: any) => {
     const p = this._getPos(ev);
     if (p) {
       this._handleCursorPosition(p, this.props.onMouseClick);
@@ -449,30 +418,22 @@ export default class SongImpl
   };
 
   private _loadXML(xml: string) {
-    this.setState({
-      document: null,
-      factory: null,
-    });
-
+    const generation = ++this.loadGeneration;
+    this.state = { document: null, factory: null };
+    this.notify();
     importXML(xml, (error, loadedDocument, loadedFactory) => {
+      if (generation !== this.loadGeneration) return;
       if (error) {
         this.props.onError(error);
-      } else {
-        this.setState(
-          {
-            document: loadedDocument,
-            factory: loadedFactory,
-          },
-          this._preRender,
-        );
+        return;
       }
+      this.state = { document: loadedDocument, factory: loadedFactory };
+      this._preRender();
       invariant(
         !this.props.patches,
         "Expected patches to be empty on document load.",
       );
-      if (this.props.onLoaded) {
-        this.props.onLoaded();
-      }
+      this.props.onLoaded?.();
     });
   }
 }

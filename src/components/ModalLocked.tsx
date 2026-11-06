@@ -2,7 +2,7 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import { RefreshCw } from "lucide-react";
-import React from "react";
+import { memo } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -17,10 +17,10 @@ import {
  * A modal that is rendered when this song is being edited in another tab.
  * There's no escaping this modal. You need to reload or close the tab to continue.
  */
-const ModalLocked: React.FC = React.memo(function ModalLocked() {
+const ModalLocked = memo(function ModalLocked() {
   return (
     <Dialog
-      open={true}
+      open
       /*
        * Inescapable by design: `open` is pinned to `true` with no `onOpenChange`,
        * so base-ui cannot close it on Escape or outside-click. Pointer dismissal

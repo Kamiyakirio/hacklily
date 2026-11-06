@@ -6,8 +6,8 @@
 export const VERSION =
   (typeof process !== "undefined" && process.env.SATIE_VERSION) || "";
 
-import type { ISongClass } from "./document";
-import SongImpl from "./engine_songImpl";
+import type { ISongComponent } from "./document";
+import SongView from "./engine_song";
 
 /* The web application API */
 export { default as Application } from "./engine_application";
@@ -16,7 +16,7 @@ export { default as Application } from "./engine_application";
 export { default as IHandler } from "./engine_application";
 
 export * from "./document";
-export const Song: ISongClass = SongImpl;
+export const Song: ISongComponent = SongView;
 
 import { getNativeKeyAccidentals } from "./implAttributes_attributesData";
 import EClef from "./implAttributes_clefView";

@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import { times, map } from "lodash";
-import * as PropTypes from "prop-types";
-import * as React from "react";
-import type { ReactElement } from "react";
-import { Component } from "react";
+import { map, times } from "lodash";
+import { useContext } from "react";
 
 import type { IBeamLayout } from "./implChord_beamLayout";
 import TupletNumber from "./implChord_tupletNumberView";
+import { RenderContext } from "./private_renderContext";
 import { bravura, getFontOffset } from "./private_smufl";
 
 export interface IProps {
@@ -21,153 +19,135 @@ export interface IProps {
 /**
  * Renders a beam based on a computed layout.
  */
-export default class Beam extends Component<IProps, {}> {
-  static contextTypes = {
-    originY: PropTypes.number.isRequired,
-  } as any;
-
-  declare context: {
-    originY: number;
-  };
-
-  render(): ReactElement<any> {
-    const xLow = this._getX1();
-    const xHigh = this._getX2();
-    const { layout } = this.props;
-    const { tuplet, beamCount, x, direction } = layout;
-
-    return (
-      <g>
-        {map(beamCount, (beams: number, idx: number): any => {
-          return times(beams, (beam) => {
-            let x1: number;
-            let x2: number = this._withXOffset(x[idx]);
-            if (beamCount[idx - 1] <= beam) {
-              if (x[idx + 1] && beamCount[idx + 1] === beams) {
-                return null;
-              }
-              x1 = this._withXOffset((x[idx - 1] + x[idx] * 3) / 4);
-
-              if (idx === 0) {
-                return null;
-              }
-            } else if (
-              beamCount[idx + 1] <= beam &&
-              (!x[idx + 1] || beamCount[idx - 1] !== beams)
-            ) {
-              x1 = this._withXOffset(x[idx]);
-              x2 = this._withXOffset((x[idx + 1] + x[idx] * 3) / 4);
-            } else {
-              x1 = this._withXOffset(x[idx - 1]);
-
-              if (idx === 0) {
-                return null;
-              }
-            }
-            return (
-              <polygon
-                fill={this.props.stroke}
-                key={idx + "_" + beam}
-                points={
-                  x1 +
-                  "," +
-                  this._getYVar(0, beam, (x1 - xLow) / (xHigh - xLow)) +
-                  " " +
-                  x2 +
-                  "," +
-                  this._getYVar(0, beam, (x2 - xLow) / (xHigh - xLow)) +
-                  " " +
-                  x2 +
-                  "," +
-                  this._getYVar(1, beam, (x2 - xLow) / (xHigh - xLow)) +
-                  " " +
-                  x1 +
-                  "," +
-                  this._getYVar(1, beam, (x1 - xLow) / (xHigh - xLow))
-                }
-                stroke={this.props.stroke}
-                strokeWidth={0}
-              />
-            );
-          });
-        })}
-        {tuplet && (
-          <TupletNumber
-            tuplet={tuplet}
-            x1={xLow}
-            x2={xHigh}
-            y1={this._getYVar(0, -1, 0) - (direction >= 1 ? 8.5 : -1.8)}
-            y2={this._getYVar(0, -1, 1) - (direction >= 1 ? 8.5 : -1.8)}
-          />
-        )}
-      </g>
-    );
+export default function Beam(props: IProps) {
+  const renderContext = useContext(RenderContext);
+  function getLineXOffset() {
+    return (props.layout.direction * -props.stemWidth) / 2;
   }
 
-  /**
-   * Offset because the note-head has a non-zero width.
-   */
-  getLineXOffset() {
-    return (this.props.layout.direction * -this.props.stemWidth) / 2;
-  }
-
-  private _withXOffset(x: number) {
+  function _withXOffset(x: number) {
     // Note that we use notehadBlack regardless of the notehead.
     // This keeps spacing consistent, even in beam groups with rests.
 
     return (
       x +
-      getFontOffset("noteheadBlack", this.props.layout.direction)[0] * 10 +
-      this.getLineXOffset()
+      getFontOffset("noteheadBlack", props.layout.direction)[0] * 10 +
+      getLineXOffset()
     );
   }
 
-  private _getX1() {
-    return this._withXOffset(this.props.layout.x[0]);
+  function _getX1() {
+    return _withXOffset(props.layout.x[0]);
   }
 
-  private _getX2() {
-    return this._withXOffset(
-      this.props.layout.x[this.props.layout.x.length - 1],
-    );
+  function _getX2() {
+    return _withXOffset(props.layout.x[props.layout.x.length - 1]);
   }
 
-  private _getY1(incl: number, idx: number) {
+  function _getY1(incl: number, idx: number) {
     // Note that we use notehadBlack regardless of the notehead.
     // This keeps spacing consistent, even in beam groups with rests.
     return (
-      this.context.originY -
-      this.props.layout.y1 -
-      this._getYOffset() +
-      this.props.layout.direction * idx * 8.8 -
+      renderContext.originY -
+      props.layout.y1 -
+      _getYOffset() +
+      props.layout.direction * idx * 8.8 -
       // TODO: use print defaults
       (incl || 0) * (bravura.engravingDefaults.beamThickness * 10)
     );
   }
 
-  private _getY2(incl: number, idx: number) {
+  function _getY2(incl: number, idx: number) {
     // Note that we use notehadBlack regardless of the notehead.
     // This keeps spacing consistent, even in beam groups with rests.
     return (
-      this.context.originY -
-      this.props.layout.y2 -
-      this._getYOffset() +
-      this.props.layout.direction * idx * 8.8 -
+      renderContext.originY -
+      props.layout.y2 -
+      _getYOffset() +
+      props.layout.direction * idx * 8.8 -
       (incl || 0) * (bravura.engravingDefaults.beamThickness * 10)
     );
   }
 
-  private _getYVar(incl: number, idx: number, percent: number) {
-    const y1 = this._getY1(incl, idx);
-    const y2 = this._getY2(incl, idx);
+  function _getYVar(incl: number, idx: number, percent: number) {
+    const y1 = _getY1(incl, idx);
+    const y2 = _getY2(incl, idx);
     return (1 - percent) * y1 + percent * y2;
   }
 
-  /**
-   * Offset because the note-head has a non-zero height.
-   * The note-head is NOT CENTERED at its local origin.
-   */
-  private _getYOffset() {
+  function _getYOffset() {
     return -3;
   }
+
+  const xLow = _getX1();
+  const xHigh = _getX2();
+  const { layout } = props;
+  const { tuplet, beamCount, x, direction } = layout;
+
+  return (
+    <g>
+      {map(beamCount, (beams: number, idx: number): any => {
+        return times(beams, (beam) => {
+          let x1: number;
+          let x2: number = _withXOffset(x[idx]);
+          if (beamCount[idx - 1] <= beam) {
+            if (x[idx + 1] && beamCount[idx + 1] === beams) {
+              return null;
+            }
+            x1 = _withXOffset((x[idx - 1] + x[idx] * 3) / 4);
+
+            if (idx === 0) {
+              return null;
+            }
+          } else if (
+            beamCount[idx + 1] <= beam &&
+            (!x[idx + 1] || beamCount[idx - 1] !== beams)
+          ) {
+            x1 = _withXOffset(x[idx]);
+            x2 = _withXOffset((x[idx + 1] + x[idx] * 3) / 4);
+          } else {
+            x1 = _withXOffset(x[idx - 1]);
+
+            if (idx === 0) {
+              return null;
+            }
+          }
+          return (
+            <polygon
+              fill={props.stroke}
+              key={idx + "_" + beam}
+              points={
+                x1 +
+                "," +
+                _getYVar(0, beam, (x1 - xLow) / (xHigh - xLow)) +
+                " " +
+                x2 +
+                "," +
+                _getYVar(0, beam, (x2 - xLow) / (xHigh - xLow)) +
+                " " +
+                x2 +
+                "," +
+                _getYVar(1, beam, (x2 - xLow) / (xHigh - xLow)) +
+                " " +
+                x1 +
+                "," +
+                _getYVar(1, beam, (x1 - xLow) / (xHigh - xLow))
+              }
+              stroke={props.stroke}
+              strokeWidth={0}
+            />
+          );
+        });
+      })}
+      {tuplet && (
+        <TupletNumber
+          tuplet={tuplet}
+          x1={xLow}
+          x2={xHigh}
+          y1={_getYVar(0, -1, 0) - (direction >= 1 ? 8.5 : -1.8)}
+          y2={_getYVar(0, -1, 1) - (direction >= 1 ? 8.5 : -1.8)}
+        />
+      )}
+    </g>
+  );
 }

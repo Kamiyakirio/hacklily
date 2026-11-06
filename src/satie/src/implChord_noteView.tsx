@@ -2,15 +2,14 @@
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import { map } from "lodash";
-import * as PropTypes from "prop-types";
-import * as React from "react";
-import { Component } from "react";
+import { useContext } from "react";
 
 import type { Note } from "#/musicxml-interfaces";
 import { NoteheadType } from "#/musicxml-interfaces";
 
 import AccidentalView from "./implAttributes_accidentalView";
 import NoteheadView from "./implChord_noteheadView";
+import { RenderContext } from "./private_renderContext";
 import { getLeft, getRight } from "./private_smufl";
 import Dot from "./private_views_dot";
 import Glyph from "./private_views_glyph";
@@ -22,34 +21,30 @@ export interface IProps {
   defaultX?: number;
 }
 
-export default class NoteView extends Component<IProps, {}> {
-  static childContextTypes = {
-    originY: PropTypes.number.isRequired,
-  } as any;
+export default function NoteView(props: IProps) {
+  const renderContext = useContext(RenderContext);
+  function getRenderContext() {
+    return {
+      ...renderContext,
+      originY: renderContext.originY - props.spec.defaultY,
+    };
+  }
 
-  static contextTypes = {
-    originY: PropTypes.number.isRequired,
-  } as any;
+  const spec = props.spec;
 
-  declare context: {
-    originY: number;
-  };
+  if (spec.printObject === false) {
+    return null;
+  }
+  const defaultX = props.defaultX || spec.defaultX;
 
-  render(): any {
-    const spec = this.props.spec;
+  const noteheadGlyph = props.noteheadGlyph;
+  const right = getRight(noteheadGlyph);
+  const left = getLeft(noteheadGlyph);
 
-    if (spec.printObject === false) {
-      return null;
-    }
-    const defaultX = this.props.defaultX || spec.defaultX;
+  const hasParens = spec.notehead && spec.notehead.parentheses;
 
-    const noteheadGlyph = this.props.noteheadGlyph;
-    const right = getRight(noteheadGlyph);
-    const left = getLeft(noteheadGlyph);
-
-    const hasParens = spec.notehead && spec.notehead.parentheses;
-
-    return (
+  return (
+    <RenderContext value={getRenderContext()}>
       <g>
         {
           <NoteheadView
@@ -71,17 +66,17 @@ export default class NoteView extends Component<IProps, {}> {
                 radius={2.4}
                 x={defaultX + right + 6 + 6 * idx}
                 y={
-                  this.context.originY -
-                  this.props.spec.defaultY -
+                  renderContext.originY -
+                  props.spec.defaultY -
                   (dot.defaultY + (dot.relativeY || 0))
                 }
               />
             ))
           : null}
-        {this.props.spec.accidental ? (
+        {props.spec.accidental ? (
           <AccidentalView
             key="a"
-            spec={this.props.spec.accidental}
+            spec={props.spec.accidental}
             noteDefaultX={defaultX}
           />
         ) : null}
@@ -89,7 +84,7 @@ export default class NoteView extends Component<IProps, {}> {
           <Glyph
             glyphName="noteheadParenthesisRight"
             fill="black"
-            y={this.context.originY - this.props.spec.defaultY}
+            y={renderContext.originY - props.spec.defaultY}
             x={defaultX + right + 2}
           />
         )}
@@ -97,17 +92,11 @@ export default class NoteView extends Component<IProps, {}> {
           <Glyph
             glyphName="noteheadParenthesisLeft"
             fill="black"
-            y={this.context.originY - this.props.spec.defaultY}
+            y={renderContext.originY - props.spec.defaultY}
             x={defaultX + left - 5}
           />
         )}
       </g>
-    );
-  }
-
-  getChildContext() {
-    return {
-      originY: this.context.originY - this.props.spec.defaultY,
-    };
-  }
+    </RenderContext>
+  );
 }

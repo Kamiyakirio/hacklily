@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
-
 import { Button } from "#/components/ui/button.tsx";
 
 export interface Props {
@@ -13,81 +11,84 @@ export interface Props {
 /**
  * Renders help links in the note tool.
  */
-const NoteAdditionalHelp: React.FC<Props> = (props) => {
+const NoteAdditionalHelp = (props: Props) => {
   const { kind, onHide } = props;
 
-  function renderKeyboard(): JSX.Element {
+  function renderKeyboard() {
     return (
       <span className="flex flex-col gap-2">
         <h3>What keyboard shortcuts are available?</h3>
         <table style={{ borderWidth: 1, borderColor: "black" }}>
-          <tr>
-            <td>1-7</td>
-            <td>
-              Select note duration (1 = 32
-              <sup>nd</sup> note, 7 = whole note) for the next note you enter.
-            </td>
-          </tr>
-          <tr>
-            <td>.</td>
-            <td>
-              Toggle the number of dots to add to the next note you enter.
-            </td>
-          </tr>
-          <tr>
-            <td>0, -, =</td>
-            <td>
-              Sets or unsets the type of accidental for the next note you enter.
-            </td>
-          </tr>
-          <tr>
-            <td>a-g</td>
-            <td>
-              Insert a note where the cursor is. Creates a new bar if cursor is
-              at the end of a bar.
-            </td>
-          </tr>
-          <tr>
-            <td>r</td>
-            <td>
-              Insert a rest where the cursor is. Creates a new bar if cursor is
-              at the end of a bar.
-            </td>
-          </tr>
-          <tr>
-            <td>shift + a-g</td>
-            <td>Add a note to the previous note or chord.</td>
-          </tr>
-          <tr>
-            <td>&#8593;</td>
-            <td>Bump the previous note up an octave.</td>
-          </tr>
-          <tr>
-            <td>&#8595;</td>
-            <td>Bump the previous note down an octave.</td>
-          </tr>
-          <tr>
-            <td>&#8592;</td>
-            <td>Move the cursor back a note or rest.</td>
-          </tr>
-          <tr>
-            <td>&#8594;</td>
-            <td>Move the cursor forward a note or rest.</td>
-          </tr>
-          <tr>
-            <td>ctrl+z or &#8984;+z</td>
-            <td>Undo the previous action</td>
-          </tr>
-          <tr>
-            <td>shift+ctrl+z or shift+&#8984;+z</td>
-            <td>Redo an action that was undone.</td>
-          </tr>
+          <tbody>
+            <tr>
+              <td>1-7</td>
+              <td>
+                Select note duration (1 = 32
+                <sup>nd</sup> note, 7 = whole note) for the next note you enter.
+              </td>
+            </tr>
+            <tr>
+              <td>.</td>
+              <td>
+                Toggle the number of dots to add to the next note you enter.
+              </td>
+            </tr>
+            <tr>
+              <td>0, -, =</td>
+              <td>
+                Sets or unsets the type of accidental for the next note you
+                enter.
+              </td>
+            </tr>
+            <tr>
+              <td>a-g</td>
+              <td>
+                Insert a note where the cursor is. Creates a new bar if cursor
+                is at the end of a bar.
+              </td>
+            </tr>
+            <tr>
+              <td>r</td>
+              <td>
+                Insert a rest where the cursor is. Creates a new bar if cursor
+                is at the end of a bar.
+              </td>
+            </tr>
+            <tr>
+              <td>shift + a-g</td>
+              <td>Add a note to the previous note or chord.</td>
+            </tr>
+            <tr>
+              <td>&#8593;</td>
+              <td>Bump the previous note up an octave.</td>
+            </tr>
+            <tr>
+              <td>&#8595;</td>
+              <td>Bump the previous note down an octave.</td>
+            </tr>
+            <tr>
+              <td>&#8592;</td>
+              <td>Move the cursor back a note or rest.</td>
+            </tr>
+            <tr>
+              <td>&#8594;</td>
+              <td>Move the cursor forward a note or rest.</td>
+            </tr>
+            <tr>
+              <td>ctrl+z or &#8984;+z</td>
+              <td>Undo the previous action</td>
+            </tr>
+            <tr>
+              <td>shift+ctrl+z or shift+&#8984;+z</td>
+              <td>Redo an action that was undone.</td>
+            </tr>
+          </tbody>
         </table>
       </span>
     );
   }
 
-  function renderMIDI(): JSX.Element {
+  function renderMIDI() {
     return (
       <span className="flex flex-col gap-2">
         <h3>How do I enter sheet music using a MIDI keyboard?</h3>
@@ -106,7 +107,7 @@ const NoteAdditionalHelp: React.FC<Props> = (props) => {
     </p>*/
   }
 
-  function renderMouse(): JSX.Element {
+  function renderMouse() {
     return (
       <span className="flex flex-col gap-2">
         <h3>How do I enter sheet music using a mouse?</h3>
@@ -136,7 +137,7 @@ const NoteAdditionalHelp: React.FC<Props> = (props) => {
     );
   }
 
-  function renderRelative(): JSX.Element {
+  function renderRelative() {
     return (
       <span className="flex flex-col gap-2">
         <h3>What is relative output?</h3>
@@ -164,7 +165,7 @@ const NoteAdditionalHelp: React.FC<Props> = (props) => {
     );
   }
 
-  function renderWhyNotEdit(): JSX.Element {
+  function renderWhyNotEdit() {
     return (
       <span className="flex flex-col gap-2">
         <h3 className="font-bold">What features does this tool have?</h3>

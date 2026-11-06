@@ -2,7 +2,7 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import { Loader2 } from "lucide-react";
-import React from "react";
+import { memo } from "react";
 
 import {
   Dialog,
@@ -15,10 +15,10 @@ import {
  * A modal that is rendered while saving a song.
  * There's no escaping this modal. It's visible until saving completes.
  */
-const ModalSaving: React.FC = React.memo(function ModalSaving() {
+const ModalSaving = memo(function ModalSaving() {
   return (
     <Dialog
-      open={true}
+      open
       /*
        * Inescapable by design: `open` is pinned to `true` with no `onOpenChange`,
        * so base-ui cannot close it on Escape or outside-click (a controlled dialog

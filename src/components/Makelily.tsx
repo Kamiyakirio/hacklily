@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
+import type { ComponentType, ErrorInfo } from "react";
+import { useEffect, useState } from "react";
 
 import { parseClef, parseKeySig, parseTime } from "#/lib/parseLy";
 import { Application, requireFont } from "#/satie/src/satie";
 
 import { cn } from "../lib/utils";
+import ErrorBoundary from "./ErrorBoundary";
 import ToolError from "./MakelilyError";
 import ToolNoteEdit from "./MakelilyNoteEdit";
 import ToolNotFound from "./MakelilyNotFound";
@@ -23,7 +25,7 @@ export const satieApplication: Application = new Application({
 requireFont("Bravura", "root://bravura/otf/Bravura.otf");
 
 interface InsertMode {
-  Component: React.ComponentType<MakelilyToolProps>;
+  Component: ComponentType<MakelilyToolProps>;
   key: string;
   name: string;
 }
@@ -73,107 +75,93 @@ export interface State {
 /**
  * A modal which provides UIs for inserting LilyPond.
  */
-export default class Makelily extends React.Component<Props, State> {
-  state: State = {
-    toolKey: this.props.defaultTool || "clef",
-  };
-
-  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+export default function Makelily({ onHide, ...props }: Props) {
+  const [toolKey, setToolKey] = useState(props.defaultTool || "clef");
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onHide();
+      }
+    }
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onHide]);
+  function handleToolError(error: Error, info: ErrorInfo) {
     console.warn("Caught error", error, info);
-    this.setState({
-      toolKey: "error",
-    });
+    setToolKey("error");
   }
 
-  componentDidMount(): void {
-    document.addEventListener("keydown", this.handleDocumentKeyDown);
-  }
-
-  componentWillUnmount(): void {
-    document.removeEventListener("keydown", this.handleDocumentKeyDown);
-  }
-
-  render(): JSX.Element {
-    const modeElements: JSX.Element[] = modes
-      .filter((mode: InsertMode) => mode.name !== null)
-      .map((mode: InsertMode, i: number) => {
-        const className: string = cn(
-          styles.modeItem,
-          i + 1 === modes.length && styles.modeItemLast,
-          mode.key === this.state.toolKey && styles.modeItemSelected,
-        );
-
-        return (
-          <li
-            className={className}
-            onClick={(): void => this.setState({ toolKey: mode.key })}
-            role="button"
-            key={mode.key}
-          >
-            {mode.name}
-          </li>
-        );
-      });
-
-    const activeMode: InsertMode = modes.find(
-      (mode: InsertMode) => mode.key === this.state.toolKey,
-    );
-    const Tool: React.ComponentType<MakelilyToolProps> = activeMode
-      ? activeMode.Component
-      : ToolNotFound;
-
-    let bar: JSX.Element | null;
-    if (!this.props.singleTaskMode) {
-      bar = (
-        <div className={cn(styles.modeBar)}>
-          <h2 className={cn(styles.heading)}>LilyPond Tools</h2>
-          <ul className={cn(styles.modeList)}>{modeElements}</ul>
-        </div>
+  const modeElements = modes
+    .filter((mode: InsertMode) => mode.name !== null)
+    .map((mode: InsertMode, i: number) => {
+      const className: string = cn(
+        styles.modeItem,
+        i + 1 === modes.length && styles.modeItemLast,
+        mode.key === toolKey && styles.modeItemSelected,
       );
-    }
 
-    const contentClass: string = cn(
-      styles.content,
-      this.props.singleTaskMode && styles.contentNoBar,
-    );
-
-    return (
-      <span>
-        <div
+      return (
+        <li
+          className={className}
+          onClick={(): void => setToolKey(mode.key)}
           role="button"
-          aria-label="close"
-          className={cn(styles.modalBg)}
-          onClick={this.props.onHide}
-        />
-        <div className={cn(styles.modal)}>
-          {bar}
-          <div className={contentClass}>
-            <Tool
-              clef={parseClef(this.props.clef)}
-              keySig={parseKeySig(this.props.keySig)}
-              time={parseTime(this.props.time)}
-              onInsertLy={this.props.onInsertLy}
-            />
-          </div>
-          <a
-            href="#"
-            onClick={this.props.onHide}
-            role="button"
-            className={cn(styles.close)}
-          >
-            {"\u00d7"}
-          </a>
-        </div>
-      </span>
-    );
-  }
+          key={mode.key}
+        >
+          {mode.name}
+        </li>
+      );
+    });
 
-  private handleDocumentKeyDown = (e: KeyboardEvent): void => {
-    if (e.keyCode === 27) {
-      e.preventDefault();
-      this.props.onHide();
-    }
-  };
+  const activeMode: InsertMode = modes.find(
+    (mode: InsertMode) => mode.key === toolKey,
+  );
+  const Tool: ComponentType<MakelilyToolProps> = activeMode
+    ? activeMode.Component
+    : ToolNotFound;
+
+  const bar = !props.singleTaskMode ? (
+    <div className={cn(styles.modeBar)}>
+      <h2 className={cn(styles.heading)}>LilyPond Tools</h2>
+      <ul className={cn(styles.modeList)}>{modeElements}</ul>
+    </div>
+  ) : null;
+
+  const contentClass: string = cn(
+    styles.content,
+    props.singleTaskMode && styles.contentNoBar,
+  );
+
+  return (
+    <>
+      <div
+        role="button"
+        aria-label="close"
+        className={cn(styles.modalBg)}
+        onClick={onHide}
+      />
+      <div className={cn(styles.modal)}>
+        {bar}
+        <div className={contentClass}>
+          <ErrorBoundary
+            key={toolKey}
+            fallback={<ToolError />}
+            onError={handleToolError}
+          >
+            <Tool
+              clef={parseClef(props.clef)}
+              keySig={parseKeySig(props.keySig)}
+              time={parseTime(props.time)}
+              onInsertLy={props.onInsertLy}
+            />
+          </ErrorBoundary>
+        </div>
+        <a href="#" onClick={onHide} role="button" className={cn(styles.close)}>
+          {"\u00d7"}
+        </a>
+      </div>
+    </>
+  );
 }
 
 const styles = {

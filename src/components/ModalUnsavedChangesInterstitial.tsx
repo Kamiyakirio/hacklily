@@ -2,7 +2,7 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import { Save, Trash } from "lucide-react";
-import React from "react";
+import { memo } from "react";
 
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -32,10 +32,10 @@ interface Props {
  *
  * This modal requests to be closed by calling one of the three callbacks.
  */
-const ModalUnsavedChangesInterstitial: React.FC<Props> = React.memo(
-  function ModalUnsavedChangesInterstitial(props) {
+const ModalUnsavedChangesInterstitial = memo(
+  function ModalUnsavedChangesInterstitial(props: Props) {
     return (
-      <Dialog open={true} onOpenChange={(open) => !open && props.cancel()}>
+      <Dialog open onOpenChange={(open) => !open && props.cancel()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Unsaved changes</DialogTitle>

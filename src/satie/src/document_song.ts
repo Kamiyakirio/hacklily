@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import * as React from "react";
+import type { ComponentType, Ref } from "react";
 
 import type { ScoreHeader, Pitch } from "#/musicxml-interfaces";
 import type { IAny } from "#/musicxml-interfaces/operations";
@@ -88,7 +88,8 @@ export function specIsPartBuilder(spec: IPatchSpec): spec is {
   return spec && (spec as any).partBuilder;
 }
 
-export interface ISong extends React.Component<IProps, {}> {
+export interface ISong {
+  readonly props: IProps;
   /**
    * Returns the document represented by the song. The document represents the
    * current state of the song.
@@ -111,6 +112,4 @@ export interface ISong extends React.Component<IProps, {}> {
   header: ScoreHeader;
 }
 
-export type ISongClass = React.ComponentClass<IProps> & {
-  new (p: IProps): ISong;
-};
+export type ISongComponent = ComponentType<IProps & { ref?: Ref<ISong> }>;

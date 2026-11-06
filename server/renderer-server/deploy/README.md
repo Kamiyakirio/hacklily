@@ -175,7 +175,7 @@ checks this and aborts with a helpful message if it doesn't match.
 4. Replaces the site with `nginx/render.hacklily.org.conf` and reloads.
 5. Enables the certbot renewal timer (`certbot-renew.timer` on Fedora,
    `certbot.timer` on Debian/Ubuntu) so renewals are automatic; the `--deploy-hook
-"systemctl reload nginx"` saved at issuance reloads nginx after each
+   "systemctl reload nginx"` saved at issuance reloads nginx after each
    renewal.
 
 ### The site, in one breath

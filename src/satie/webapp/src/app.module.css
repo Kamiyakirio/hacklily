@@ -6,7 +6,7 @@ body {
   max-width: 650px;
   line-height: 1.6;
   font-size: 18px;
-  color: @color--text;
+  color: var(--color--text);
   padding: 0 10px;
 }
 
@@ -21,7 +21,7 @@ a {
   text-decoration: none;
 }
 
-:local(.topbar) {
+.topbar {
   position: fixed;
   width: 100%;
   top: 0;
@@ -30,7 +30,7 @@ a {
   height: 3px;
 }
 
-:local(.toplink) {
+.toplink {
   position: absolute;
   top: 15px;
   left: 15px;
@@ -41,13 +41,13 @@ a {
 }
 
 @media (min-width: 920px) {
-  :local(.toplink) {
+  .toplink {
     position: fixed;
   }
 }
 
 @media (max-width: 460px) {
-  :local(.toplink) {
+  .toplink {
     width: 100%;
     text-align: center;
   }

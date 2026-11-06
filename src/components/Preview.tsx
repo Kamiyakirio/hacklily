@@ -2,14 +2,13 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import DOMPurify from "dompurify";
-import { debounce } from "lodash";
 import type * as monacoEditor from "monaco-editor";
-import React from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { track } from "#/lib/analytics";
 import { decodeArrayBuffer } from "#/lib/base64Binary";
 import { renderVersionFor } from "#/lib/lilypondVersion";
-import type { SvgRenderer } from "#/lib/SvgRenderer";
+import type { RenderResult, SvgRenderer } from "#/lib/SvgRenderer";
 import { cn } from "#/lib/utils";
 
 import type { ViewMode } from "./Header";
@@ -180,12 +179,6 @@ interface Props {
   onSelectionChanged(selection: monacoEditor.ISelection | null): void;
 }
 
-interface State {
-  error: string | null;
-  pendingPreviews: number;
-  previewAlreadyDirty: boolean;
-}
-
 /**
  * Makes the logs easier to read by hiding details not relevant to the user.
  */
@@ -218,97 +211,18 @@ function cleanLogs(logs: string): string {
  * When you click a note, it fires onSelectionChanged so that the editor can highlight
  * where the note is defined.
  */
-export default class Preview extends React.PureComponent<Props, State> {
-  state: State = {
-    error: null,
-    pendingPreviews: 0,
-    previewAlreadyDirty: false,
-  };
-
-  private iframeLoaded = false;
-  private previousMIDIData: string | null = null;
-  private sheetMusicView: HTMLIFrameElement | null = null;
-
-  componentDidMount(): void {
-    void this.fetchNewPreview();
-  }
-
-  componentDidUpdate(prevProps: Props): void {
-    if (prevProps.code !== this.props.code) {
-      void this.fetchNewPreview();
-    }
-    if (prevProps.mode !== this.props.mode) {
-      this.handleModeDidChange();
-    }
-  }
-
-  render(): JSX.Element {
-    const { mode, logs } = this.props;
-    const { pendingPreviews, error } = this.state;
-    const previewMaskStyle: string = cn(
-      APP_STYLE.pendingPreviewMask,
-      mode === MODE_VIEW && APP_STYLE.previewPendingMaskModeView,
-    );
-
-    // WARNING: The iframe is NOT sandboxed so we can write to the iframe and so
-    // that we can add a click event (see onSelectionChanged).
-
-    return (
-      <div className="bg-background border-l border-black">
-        <iframe
-          className={cn(APP_STYLE.sheetMusicView)}
-          height="100%"
-          ref={this.handleSetSheetMusicView}
-          width={mode === MODE_BOTH ? "50%" : mode === MODE_VIEW ? "100%" : "0"}
-        />
-        {pendingPreviews > 0 && <div className={previewMaskStyle} />}
-        {error && (
-          <div
-            className={cn(
-              "bg-black text-white absolute inset-y-0 left-[50%] p-4 text-center w-[50%]",
-            )}
-          >
-            {error}
-          </div>
-        )}
-        <Logs
-          logs={logs}
-          loading={!logs || logs.length === 0 || pendingPreviews > 0}
-        />
-      </div>
-    );
-  }
-
-  private fetchNewPreview = debounce(async () => {
-    if (this.state.pendingPreviews) {
-      this.setState({
-        previewAlreadyDirty: true,
-      });
-
-      return;
-    }
-
-    this.setState({
-      pendingPreviews: this.state.pendingPreviews + 1,
-    });
-
-    if (!this.iframeLoaded) {
-      this.handleIFrameLoaded();
-    }
-
-    const { code, renderer } = this.props;
-
-    let version: "stable" | "unstable" = "stable";
-
-    try {
-      if (!renderer) {
-        throw new Error("renderer must be set!");
-      }
-
-      version = renderVersionFor(code);
-
-      const result = await renderer.renderSvg(code, version);
-
+export default function Preview(props: Props) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const [frameDocument, setFrameDocument] = useState<Document | null>(null);
+  const previousMIDIData = useRef<string | null>(null);
+  const schedule = useRef<((code: string) => void) | null>(null);
+  const selectionChanged = useEffectEvent(
+    (selection: monacoEditor.ISelection) => props.onSelectionChanged(selection),
+  );
+  const applyResult = useEffectEvent(
+    (result: RenderResult, version: "stable" | "unstable") => {
       const files: string[] = result.files;
       const dirtyLogs = result.logs;
       const midi = result.midi || null;
@@ -317,16 +231,16 @@ export default class Preview extends React.PureComponent<Props, State> {
 
       const logs: string = cleanLogs(dirtyLogs);
 
-      if (!this.sheetMusicView) {
+      if (!frameRef.current) {
         throw new Error("Could not get frame's window");
       }
 
-      if (!this.sheetMusicView.contentWindow) {
+      if (!frameRef.current.contentWindow) {
         throw new Error("Could not get frame's window");
       }
 
       const root =
-        this.sheetMusicView.contentWindow.document.getElementById("root");
+        frameRef.current.contentWindow.document.getElementById("root");
 
       if (!root) {
         throw new Error("Could not get sheet music view root!");
@@ -372,21 +286,21 @@ export default class Preview extends React.PureComponent<Props, State> {
         const parts: string[] = [];
         if (warnings > 0) parts.push(`${warnings} warning(s)`);
         if (errors > 0) parts.push(`${errors} error(s)`);
-        this.props.onLogsObtained(
+        props.onLogsObtained(
           `[rendered with ${parts.join(", ")}]\n${logs}`,
           version,
         );
       } else {
-        this.props.onLogsObtained(logs, version);
+        props.onLogsObtained(logs, version);
       }
-      if (midi !== this.previousMIDIData) {
+      if (midi !== previousMIDIData.current) {
         if (midi) {
-          this.props.onMidiObtained(decodeArrayBuffer(midi.replace(/\s/g, "")));
+          props.onMidiObtained(decodeArrayBuffer(midi.replace(/\s/g, "")));
         } else {
-          this.props.onMidiObtained(null);
+          props.onMidiObtained(null);
         }
       }
-      this.previousMIDIData = midi;
+      previousMIDIData.current = midi;
 
       const svgs: SVGSVGElement[] = Array.from(
         root.getElementsByTagName("svg"),
@@ -395,89 +309,159 @@ export default class Preview extends React.PureComponent<Props, State> {
         svg.removeAttribute("width");
         svg.removeAttribute("height");
       }
-      this.setState({
-        pendingPreviews: this.state.pendingPreviews - 1,
-      });
-      if (this.state.previewAlreadyDirty) {
-        this.setState({
-          error: null,
-          previewAlreadyDirty: false,
-        });
-        void this.fetchNewPreview();
+
+      setError(null);
+    },
+  );
+  const reportError = useEffectEvent(
+    (cause: unknown, version: "stable" | "unstable") => {
+      const message =
+        cause instanceof Error
+          ? cause.message
+          : typeof cause === "object" &&
+              cause &&
+              "error" in cause &&
+              typeof cause.error === "object" &&
+              cause.error &&
+              "message" in cause.error &&
+              typeof cause.error.message === "string"
+            ? cause.error.message
+            : "unknown error";
+      props.onLogsObtained(message, version);
+      setError(message);
+    },
+  );
+
+  useEffect(() => {
+    const body = frameDocument?.body;
+    if (!body) return;
+    const click = (ev: MouseEvent) => {
+      ev.preventDefault();
+      let target: HTMLElement | null = ev.target as HTMLElement | null;
+      while (target && target.localName !== "a") {
+        target = target.parentElement;
       }
-
-      return;
-    } catch (err: any) {
-      const errMsg =
-        (err &&
-          err.error &&
-          typeof err.error.message === "string" &&
-          err.error.message) ||
-        "unknown error";
-      this.props.onLogsObtained(errMsg, version);
-      this.setState({
-        error: errMsg,
-        pendingPreviews: this.state.pendingPreviews - 1,
-        previewAlreadyDirty: true,
-      });
-    }
-  }, DEBOUNCE_REFERSH_TIMEOUT);
-
-  private handleIFrameLoaded = (): void => {
-    if (this.sheetMusicView && this.sheetMusicView.contentWindow) {
-      const body: HTMLElement = this.sheetMusicView.contentWindow.document.body;
-      body.innerHTML = BODY_IFRAME_TEMPLATE;
-      body.addEventListener("click", (ev: MouseEvent) => {
-        ev.preventDefault();
-        let target: HTMLElement | null = ev.target as HTMLElement | null;
-        while (target && target.localName !== "a") {
-          target = target.parentElement;
+      if (target && target.localName === "a") {
+        const link: string | null = target.getAttribute("xlink:href");
+        if (!link) {
+          return;
         }
-        if (target && target.localName === "a") {
-          const link: string | null = target.getAttribute("xlink:href");
-          if (!link) {
-            return;
-          }
-          const pathAndLocation: string[] = link.split(".ly:");
-          if (pathAndLocation.length === 2) {
-            const [line, startColumn, endColumn] =
-              pathAndLocation[1].split(":");
-            this.props.onSelectionChanged({
-              // NOTE: we add a line on render:
-              positionColumn: parseInt(endColumn, 10) + 1,
-              positionLineNumber: parseInt(line, 10) - 1,
-              selectionStartColumn: parseInt(startColumn, 10) + 1,
-              selectionStartLineNumber: parseInt(line, 10) - 1,
-            });
-          }
+        const pathAndLocation: string[] = link.split(".ly:");
+        if (pathAndLocation.length === 2) {
+          const [line, startColumn, endColumn] = pathAndLocation[1].split(":");
+          selectionChanged({
+            // NOTE: we add a line on render:
+            positionColumn: parseInt(endColumn, 10) + 1,
+            positionLineNumber: parseInt(line, 10) - 1,
+            selectionStartColumn: parseInt(startColumn, 10) + 1,
+            selectionStartLineNumber: parseInt(line, 10) - 1,
+          });
         }
-      });
-    }
-    this.handleModeDidChange();
-    this.iframeLoaded = true;
-  };
+      }
+    };
+    body.addEventListener("click", click);
+    return () => body.removeEventListener("click", click);
+  }, [frameDocument]);
 
-  private handleModeDidChange = (): void => {
-    if (this.sheetMusicView && this.sheetMusicView.contentWindow) {
-      const body: HTMLElement = this.sheetMusicView.contentWindow.document.body;
-      body.classList.remove("modeBoth", "modeView", "modeEdit");
-      switch (this.props.mode) {
-        case MODE_BOTH:
-          body.classList.add("modeBoth");
-          break;
-        case MODE_VIEW:
-          body.classList.add("modeView");
-          break;
-        default:
-          body.classList.add("modeEdit");
-          break;
+  useEffect(() => {
+    const body = frameDocument?.body;
+    if (!body) return;
+    body.classList.toggle("modeBoth", props.mode === MODE_BOTH);
+    body.classList.toggle("modeView", props.mode === MODE_VIEW);
+    body.classList.toggle(
+      "modeEdit",
+      props.mode !== MODE_BOTH && props.mode !== MODE_VIEW,
+    );
+  }, [frameDocument, props.mode]);
+
+  useEffect(() => {
+    let active = true;
+    let running = false;
+    let queued = false;
+    let latestCode = "";
+    let timer: ReturnType<typeof setTimeout>;
+    const renderer = props.renderer;
+
+    async function run() {
+      if (!active) return;
+      if (running) {
+        queued = true;
+        return;
+      }
+      running = true;
+      queued = false;
+      setPending(true);
+      const code = latestCode;
+      const version = renderVersionFor(code);
+      try {
+        const result = await renderer.renderSvg(code, version);
+        if (active && code === latestCode) applyResult(result, version);
+      } catch (cause) {
+        if (active && code === latestCode) reportError(cause, version);
+      } finally {
+        running = false;
+        if (active) {
+          if (queued) {
+            clearTimeout(timer);
+            timer = setTimeout(() => void run(), DEBOUNCE_REFERSH_TIMEOUT);
+          } else setPending(false);
+        }
       }
     }
-  };
+    function request(code: string) {
+      latestCode = code;
+      queued = true;
+      clearTimeout(timer);
+      timer = setTimeout(() => void run(), DEBOUNCE_REFERSH_TIMEOUT);
+    }
+    schedule.current = request;
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      schedule.current = null;
+    };
+  }, [props.renderer]);
 
-  private handleSetSheetMusicView = (
-    sheetMusicView: HTMLIFrameElement,
-  ): void => {
-    this.sheetMusicView = sheetMusicView;
-  };
+  useEffect(() => {
+    schedule.current?.(props.code);
+  }, [props.code, props.renderer]);
+
+  const { mode, logs } = props;
+  const pendingPreviews = pending ? 1 : 0;
+  const previewMaskStyle: string = cn(
+    APP_STYLE.pendingPreviewMask,
+    mode === MODE_VIEW && APP_STYLE.previewPendingMaskModeView,
+  );
+
+  // WARNING: The iframe is NOT sandboxed so we can write to the iframe and so
+  // that we can add a click event (see onSelectionChanged).
+
+  return (
+    <div className="bg-background border-l border-black">
+      <iframe
+        srcDoc={BODY_IFRAME_TEMPLATE}
+        onLoad={(event) =>
+          setFrameDocument(event.currentTarget.contentDocument)
+        }
+        className={cn(APP_STYLE.sheetMusicView)}
+        height="100%"
+        ref={frameRef}
+        width={mode === MODE_BOTH ? "50%" : mode === MODE_VIEW ? "100%" : "0"}
+      />
+      {pendingPreviews > 0 && <div className={previewMaskStyle} />}
+      {error && (
+        <div
+          className={cn(
+            "bg-black text-white absolute inset-y-0 left-[50%] p-4 text-center w-[50%]",
+          )}
+        >
+          {error}
+        </div>
+      )}
+      <Logs
+        logs={logs}
+        loading={!logs || logs.length === 0 || pendingPreviews > 0}
+      />
+    </div>
+  );
 }

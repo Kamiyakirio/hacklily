@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import * as PropTypes from "prop-types";
-import * as React from "react";
-import { Component } from "react";
+import { useContext } from "react";
 
 import type { PartSymbol } from "#/musicxml-interfaces";
 import { PartSymbolType } from "#/musicxml-interfaces";
 
+import { RenderContext } from "./private_renderContext";
 import { bravura } from "./private_smufl";
 import Glyph from "./private_views_glyph";
 import Line from "./private_views_line";
@@ -22,55 +21,17 @@ export interface IProps {
 /**
  * Renders a piano bracket or other kind of brace.
  */
-export default class PartSymbolView extends Component<IProps, {}> {
-  static contextTypes = {
-    originY: PropTypes.number.isRequired,
-    systemBottom: PropTypes.number.isRequired,
-    systemTop: PropTypes.number.isRequired,
-  } as any;
+export default function PartSymbolView(props: IProps) {
+  const renderContext = useContext(RenderContext);
+  function getSymbol(): any {
+    const spec = props.spec;
 
-  declare context: {
-    originY: number;
-    systemBottom: number;
-    systemTop: number;
-  };
-
-  render(): any {
-    if (this.props.spec.type === PartSymbolType.None) {
-      return null;
-    }
+    const height = renderContext.systemBottom - renderContext.systemTop;
+    const bottom = renderContext.systemBottom;
 
     const defaults = bravura.engravingDefaults; // TODO: Use 'print'
 
-    const height = this.context.systemBottom - this.context.systemTop;
-    const bottom = this.context.systemBottom;
-
-    const sym = this.getSymbol();
-    return (
-      <g>
-        {sym}
-        <Line
-          key="line"
-          stroke="#000000"
-          strokeWidth={defaults.thinBarlineThickness * 10}
-          x1={this.props.spec.defaultX}
-          x2={this.props.spec.defaultX}
-          y1={bottom - height}
-          y2={bottom}
-        />
-      </g>
-    );
-  }
-
-  getSymbol(): any {
-    const spec = this.props.spec;
-
-    const height = this.context.systemBottom - this.context.systemTop;
-    const bottom = this.context.systemBottom;
-
-    const defaults = bravura.engravingDefaults; // TODO: Use 'print'
-
-    const x = this.props.spec.defaultX - 14;
+    const x = props.spec.defaultX - 14;
 
     const s = height / 40;
 
@@ -114,14 +75,14 @@ export default class PartSymbolView extends Component<IProps, {}> {
             glyphName="bracketTop"
             key="bracketTop"
             x={x + 4}
-            y={this.context.systemTop - 2}
+            y={renderContext.systemTop - 2}
           />,
           <Glyph
             fill="#000000"
             glyphName="bracketBottom"
             key="bracketBottom"
             x={x + 4}
-            y={this.context.systemBottom + 2}
+            y={renderContext.systemBottom + 2}
           />,
         ];
       case PartSymbolType.Line:
@@ -130,4 +91,29 @@ export default class PartSymbolView extends Component<IProps, {}> {
         throw new Error(`Invalid PartSymbolType ${spec.type}`);
     }
   }
+
+  if (props.spec.type === PartSymbolType.None) {
+    return null;
+  }
+
+  const defaults = bravura.engravingDefaults; // TODO: Use 'print'
+
+  const height = renderContext.systemBottom - renderContext.systemTop;
+  const bottom = renderContext.systemBottom;
+
+  const sym = getSymbol();
+  return (
+    <g>
+      {sym}
+      <Line
+        key="line"
+        stroke="#000000"
+        strokeWidth={defaults.thinBarlineThickness * 10}
+        x1={props.spec.defaultX}
+        x2={props.spec.defaultX}
+        y1={bottom - height}
+        y2={bottom}
+      />
+    </g>
+  );
 }

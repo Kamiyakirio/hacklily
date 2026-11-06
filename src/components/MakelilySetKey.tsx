@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
+import { useReducer } from "react";
 
+import { mergeState } from "#/lib/state";
 import type { Clef, Key } from "#/musicxml-interfaces";
 import { Addons as SatieAddons } from "#/satie/src/satie";
 
@@ -93,99 +94,93 @@ function getInitialState(props: MakelilyToolProps): State {
 /**
  * A tool which allows a key to be inserted.
  */
-export default class ToolSetKey extends React.Component<
-  MakelilyToolProps,
-  State
-> {
-  state: State = getInitialState(this.props);
+export default function ToolSetKey(props: MakelilyToolProps) {
+  const [state, updateState] = useReducer(
+    mergeState<State>,
+    undefined,
+    (): State => getInitialState(props),
+  );
 
-  render(): JSX.Element {
-    const ksViews: JSX.Element[] = stdKeys.major.map((key: Key, i: number) => {
-      const keySpec: Key = {
-        defaultX: 0,
-        defaultY: 0,
-        relativeY: 0,
-        ...key,
-      };
+  function generateLy(): string {
+    return getLy(stdKeys.major[state.selectedKey].fifths, state.selectedMode);
+  }
 
-      const selected: boolean = i === this.state.selectedKey;
+  function handleInsertLyClicked(): void {
+    props.onInsertLy(generateLy());
+  }
 
-      return (
-        <span
-          className={cn(
-            makelilyStyles.selectableOption,
-            selected && makelilyStyles.selectableSelected,
-          )}
-          role="button"
-          onClick={(): void => this.setState({ selectedKey: i })}
-          key={i}
-        >
-          <svg className={cn(makelilyStyles.resetFont)} viewBox={keyViewbox}>
-            <SatieAddons.KeySignature clef={trebleClef} spec={keySpec} />
-          </svg>
-          <span className={cn(makelilyStyles.selectableDescription)}>
-            {getEnglish(key.fifths, this.state.selectedMode)}
-          </span>
-        </span>
-      );
-    });
+  const ksViews = stdKeys.major.map((key: Key, i: number) => {
+    const keySpec: Key = {
+      defaultX: 0,
+      defaultY: 0,
+      relativeY: 0,
+      ...key,
+    };
+
+    const selected: boolean = i === state.selectedKey;
 
     return (
-      <div className={cn(makelilyStyles.tool)}>
-        <div className={cn(makelilyStyles.section)}>
-          <h3 className={cn(makelilyStyles.toolHeading)}>Key Signature</h3>
-          <div className={cn(makelilyStyles.selectableList)}>{ksViews}</div>
-        </div>
-        <div className={cn(makelilyStyles.section)}>
-          <h3 className={cn(makelilyStyles.toolHeading)}>Mode</h3>
-          <form className={cn(makelilyStyles.radioGroup)}>
-            <div>
-              <input
-                id="key-mode-major"
-                type="radio"
-                checked={this.state.selectedMode === "major"}
-                aria-checked={this.state.selectedMode === "major"}
-                onChange={(): void => this.setState({ selectedMode: "major" })}
-              />{" "}
-              <label htmlFor="key-mode-major">Major (M)</label>
-            </div>
-            <div>
-              <input
-                id="key-mode-minor"
-                type="radio"
-                checked={this.state.selectedMode === "minor"}
-                aria-checked={this.state.selectedMode === "minor"}
-                onChange={(): void => this.setState({ selectedMode: "minor" })}
-              />{" "}
-              <label htmlFor="key-mode-minor">Minor (m)</label>
-            </div>
-          </form>
-        </div>
-        <div className={cn(makelilyStyles.spacer)} />
-        <div className={cn(makelilyStyles.section)}>
-          <pre className={cn(makelilyStyles.lyPreview)}>
-            {this.generateLy()}
-          </pre>
+      <span
+        className={cn(
+          makelilyStyles.selectableOption,
+          selected && makelilyStyles.selectableSelected,
+        )}
+        role="button"
+        onClick={(): void => updateState({ selectedKey: i })}
+        key={i}
+      >
+        <svg className={cn(makelilyStyles.resetFont)} viewBox={keyViewbox}>
+          <SatieAddons.KeySignature clef={trebleClef} spec={keySpec} />
+        </svg>
+        <span className={cn(makelilyStyles.selectableDescription)}>
+          {getEnglish(key.fifths, state.selectedMode)}
+        </span>
+      </span>
+    );
+  });
 
-          <button
-            className={cn(makelilyStyles.insert)}
-            onClick={this.handleInsertLyClicked}
-          >
-            Insert this code into Hacklily
-          </button>
-        </div>
+  return (
+    <div className={cn(makelilyStyles.tool)}>
+      <div className={cn(makelilyStyles.section)}>
+        <h3 className={cn(makelilyStyles.toolHeading)}>Key Signature</h3>
+        <div className={cn(makelilyStyles.selectableList)}>{ksViews}</div>
       </div>
-    );
-  }
+      <div className={cn(makelilyStyles.section)}>
+        <h3 className={cn(makelilyStyles.toolHeading)}>Mode</h3>
+        <form className={cn(makelilyStyles.radioGroup)}>
+          <div>
+            <input
+              id="key-mode-major"
+              type="radio"
+              checked={state.selectedMode === "major"}
+              aria-checked={state.selectedMode === "major"}
+              onChange={(): void => updateState({ selectedMode: "major" })}
+            />{" "}
+            <label htmlFor="key-mode-major">Major (M)</label>
+          </div>
+          <div>
+            <input
+              id="key-mode-minor"
+              type="radio"
+              checked={state.selectedMode === "minor"}
+              aria-checked={state.selectedMode === "minor"}
+              onChange={(): void => updateState({ selectedMode: "minor" })}
+            />{" "}
+            <label htmlFor="key-mode-minor">Minor (m)</label>
+          </div>
+        </form>
+      </div>
+      <div className={cn(makelilyStyles.spacer)} />
+      <div className={cn(makelilyStyles.section)}>
+        <pre className={cn(makelilyStyles.lyPreview)}>{generateLy()}</pre>
 
-  private generateLy(): string {
-    return getLy(
-      stdKeys.major[this.state.selectedKey].fifths,
-      this.state.selectedMode,
-    );
-  }
-
-  private handleInsertLyClicked = (): void => {
-    this.props.onInsertLy(this.generateLy());
-  };
+        <button
+          className={cn(makelilyStyles.insert)}
+          onClick={handleInsertLyClicked}
+        >
+          Insert this code into Hacklily
+        </button>
+      </div>
+    </div>
+  );
 }

@@ -8,7 +8,7 @@ import {
   useLocation,
 } from "@tanstack/react-router";
 
-import * as STYLES from "../satie/webapp/src/app.css";
+import STYLES from "../satie/webapp/src/app.module.css";
 
 export const Route = createFileRoute("/satie")({
   component: PlaygroundLayout,

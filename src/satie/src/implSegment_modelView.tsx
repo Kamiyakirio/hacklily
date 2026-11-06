@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import * as PropTypes from "prop-types";
-import React, { Component } from "react";
+import { memo, useContext } from "react";
 
 import type { ILayout } from "./document";
 import { Type } from "./document";
@@ -11,9 +10,9 @@ import BarlineView from "./implBarline_barlineView";
 import ChordView from "./implChord_chordView";
 import DirectionView from "./implDirection_directionView";
 import VisualCursorView from "./implVisualCursor_visualCursorView";
-import { Targetable } from "./private_views_metadata";
-
-const NUMBER_ARRAY = PropTypes.arrayOf(PropTypes.number);
+import type { RenderContextValue } from "./private_renderContext";
+import { RenderContext } from "./private_renderContext";
+import { useTargetable } from "./private_views_metadata";
 
 export interface IProps {
   layout: ILayout;
@@ -24,21 +23,16 @@ export interface IProps {
 
 export interface IState {}
 
-class ModelView extends Component<IProps, IState> {
-  static childContextTypes = {
-    originY: PropTypes.number,
-  } as any;
-
-  static contextTypes = {
-    originYByPartAndStaff: PropTypes.objectOf(NUMBER_ARRAY).isRequired,
-  } as any;
-
-  declare context: {
-    originYByPartAndStaff: { [key: string]: number[] };
-  };
-
-  render(): any {
-    const layout = this.props.layout as any; // Sigh...
+function ModelView(props: IProps) {
+  const renderContext = useContext(RenderContext);
+  useTargetable(
+    props,
+    renderContext.originYByPartAndStaff[props.layout.part][
+      props.layout.model.staffIdx || 1
+    ] || 0,
+  );
+  function renderModel() {
+    const layout = props.layout as any; // Sigh...
     switch (layout.renderClass) {
       case Type.Attributes:
         return <AttributesView layout={layout} />;
@@ -55,33 +49,26 @@ class ModelView extends Component<IProps, IState> {
     }
   }
 
-  getChildContext() {
-    const layout = this.props.layout;
+  function getRenderContext(): RenderContextValue {
+    const layout = props.layout;
     return {
+      ...renderContext,
       originY:
-        this.context.originYByPartAndStaff[layout.part][
+        renderContext.originYByPartAndStaff[layout.part][
           layout.model.staffIdx || 1
         ] || 0,
     };
   }
 
-  shouldComponentUpdate(nextProps: IProps, _nextState: IState) {
-    if (nextProps.version !== this.props.version) {
-      return true;
-    }
-
-    if (
-      this.props.layout.renderClass === Type.Attributes &&
-      (this.props.layout as any).staffWidth !==
-        (nextProps.layout as any).staffWidth
-    ) {
-      return true;
-    }
-
-    return false;
-  }
+  return (
+    <RenderContext value={getRenderContext()}>{renderModel()}</RenderContext>
+  );
 }
 
-Targetable()(ModelView);
-
-export default ModelView;
+export default memo(ModelView, (previous, next) => {
+  if (previous.version !== next.version) return false;
+  return (
+    previous.layout.renderClass !== Type.Attributes ||
+    (previous.layout as any).staffWidth === (next.layout as any).staffWidth
+  );
+});

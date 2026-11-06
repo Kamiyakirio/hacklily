@@ -14,8 +14,10 @@ import {
   times,
 } from "lodash";
 import { Info } from "lucide-react";
-import React from "react";
+import type { KeyboardEvent, UIEvent } from "react";
+import { useEffect, useEffectEvent, useReducer, useRef, useState } from "react";
 
+import { mergeState } from "#/lib/state";
 import type {
   Articulations,
   Attributes,
@@ -39,7 +41,6 @@ import {
   NormalAngledSquare,
 } from "#/musicxml-interfaces";
 import type {
-  IAttributesBuilder,
   IBarlineBuilder,
   IBarStyleBuilder,
   INoteBuilder,
@@ -60,7 +61,7 @@ import type {
   StaffBuilder,
   VoiceBuilder,
 } from "#/satie/src/satie";
-import { Addons as SatieAddons, Patch, Song, Type } from "#/satie/src/satie";
+import { Patch, Addons as SatieAddons, Song, Type } from "#/satie/src/satie";
 
 import { cn } from "../lib/utils";
 import NoteAdditionalHelp from "./MakelilyNoteAdditionalHelp";
@@ -185,210 +186,124 @@ export interface State {
  * A tool which allows notes to be entered with a mouse or keyboard.
  * This may also eventually support MIDI keyboards.
  */
-export default class ToolNoteEdit extends React.Component<
-  MakelilyToolProps,
-  State
-> {
-  state: State = {
-    accidental: null,
-    canonicalOperations: null,
-    direction: null,
-    dots: 0,
-    editType: "N",
-    lastPath: null,
-    lastPitch: null,
-    notation: null,
-    note: Count.Eighth,
-    operations: null,
-    redoStack: [],
-    relativeMode: true,
-    showAdditionalHelp: null,
-    showHelp: true,
-    src: songTemplate,
-    timeModification: null,
-    undoStack: [null],
-  };
-
-  private song: ISong;
-
-  domNode: React.RefObject<HTMLDivElement> = React.createRef();
-
-  componentDidMount(): void {
-    if (this.domNode.current) {
-      this.domNode.current.focus();
-    }
-  }
-
-  render(): JSX.Element {
-    const { editType } = this.state;
-    const tallPalette: boolean = editType === "P";
-
-    let song: JSX.Element | null = null;
-    if (this.state.src) {
-      song = (
-        <Song
-          baseSrc={this.state.src}
-          onError={this.handleError}
-          patches={this.state.operations}
-          onMouseClick={this.handleMouseClick}
-          onMouseMove={this.handleMouseMove}
-          pageClassName={cn(styles.song)}
-          ref={this.setSongRef}
-        />
-      );
-    }
-
-    return (
-      <div
-        ref={this.domNode}
-        className={cn(makelilyStyles.tool)}
-        tabIndex={0}
-        onKeyPress={this.handleKeyPress}
-        onKeyDown={this.handleKeyDown}
-        role="textbox"
-      >
-        <div
-          className={cn(
-            makelilyStyles.help,
-            this.state.showHelp && makelilyStyles.helpVisible,
-            "inline-flex",
-          )}
-        >
-          <Info size="1em" className="self-center mr-1 inline" />
-          <span>
-            {" "}
-            Generate markup
-            <sup>
-              <a href="#" onClick={this.handleShowHelpWhyNotEdit} role="button">
-                ?
-              </a>
-            </sup>{" "}
-            for notes in your song using a{" "}
-            <a href="#" onClick={this.handleShowHelpMouse} role="button">
-              mouse
-            </a>
-            ,{" "}
-            <a href="#;" onClick={this.handleShowHelpKeyboard} role="button">
-              computer keyboard
-            </a>
-            , or{" "}
-            <a href="#;" onClick={this.handleShowHelpMIDI} role="button">
-              MIDI keyboard
-            </a>
-          </span>
-          .
-        </div>
-
-        {this.renderAdditionalHelp()}
-        {this.renderPalette()}
-        <div className={cn(makelilyStyles.section, "bg-white")}>
-          <div
-            className={cn(
-              styles.songContainer,
-              tallPalette && styles.songContainerSmall,
-            )}
-            onScroll={this.handleSongScroll}
-          >
-            {song}
-          </div>
-        </div>
-        <div className={cn(makelilyStyles.spacer)} />
-        <div className={cn(makelilyStyles.section)}>
-          <span className={cn(makelilyStyles.outputOptions)}>
-            <input
-              type="checkbox"
-              checked={this.state.relativeMode}
-              onChange={(): void =>
-                this.setState({ relativeMode: !this.state.relativeMode })
-              }
-              aria-checked={false}
-              id="toolnoteedit-relative"
-            />
-            <label htmlFor="toolnoteedit-relative">
-              <code>\relative</code> mode
-              <sup>
-                <a href="#" onClick={this.handleShowHelpRelative} role="button">
-                  ?
-                </a>
-              </sup>{" "}
-            </label>
-          </span>
-          <pre className={cn(makelilyStyles.lyPreview)}>
-            {this.generateLy()}
-          </pre>
-
-          <button
-            className={cn(makelilyStyles.insert)}
-            onClick={this.handleInsertLyClicked}
-          >
-            Insert this code into Hacklily
-          </button>
-        </div>
-      </div>
+export default function ToolNoteEdit(props: MakelilyToolProps) {
+  const [state, updateState] = useReducer(
+    mergeState<State>,
+    undefined,
+    (): State => ({
+      accidental: null,
+      canonicalOperations: null,
+      direction: null,
+      dots: 0,
+      editType: "N",
+      lastPath: null,
+      lastPitch: null,
+      notation: null,
+      note: Count.Eighth,
+      operations: null,
+      redoStack: [],
+      relativeMode: true,
+      showAdditionalHelp: null,
+      showHelp: true,
+      src: songTemplate,
+      timeModification: null,
+      undoStack: [null],
+    }),
+  );
+  const [songHandle, setSongRef] = useState<ISong | null>(null);
+  const initializedDocuments = useRef(new WeakSet<Document>());
+  const initializeScore = useEffectEvent((song: ISong) => {
+    const doc = song.getDocument(state.canonicalOperations);
+    if (initializedDocuments.current.has(doc)) return;
+    initializedDocuments.current.add(doc);
+    const patch = Patch.createPatch(
+      false,
+      doc,
+      doc.measures[0].uuid,
+      "P1",
+      (part) =>
+        part
+          .staff(1, (staff) =>
+            staff
+              .at(1)
+              .attributes((attributes) =>
+                attributes
+                  .clefs([props.clef])
+                  .keySignatures([props.keySig])
+                  .times([props.time]),
+              ),
+          )
+          .voice(1, (voice) => voice.at(0).addVisualCursor()),
     );
-  }
+    const operations = song.createCanonicalPatch(state.canonicalOperations, {
+      raw: patch,
+    });
+    updateState((previous) => ({
+      canonicalOperations: operations,
+      operations,
+      lastPath: null,
+      lastPitch: null,
+      redoStack: [],
+      undoStack: previous.undoStack.concat([previous.canonicalOperations]),
+    }));
+  });
+  useEffect(() => {
+    if (songHandle) initializeScore(songHandle);
+  }, [songHandle]);
+  const domNode = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    domNode.current?.focus();
+  }, []);
 
-  private applyPreviewPatch = (
+  function applyPreviewPatch(
     patch: IAny[],
     path: (string | number)[] = null,
     pitch: Pitch = null,
-  ): void => {
-    const operations: any = this.state.canonicalOperations;
-    this.setState({
+  ): void {
+    const operations: any = state.canonicalOperations;
+    updateState({
       lastPath: path,
       lastPitch: pitch,
-      operations: this.song.createPreviewPatch(operations, { raw: patch }),
+      operations: songHandle.createPreviewPatch(operations, { raw: patch }),
     });
-  };
+  }
 
-  private applyUndoablePatch = (
+  function applyUndoablePatch(
     patch: IAny[],
     _doNotEmit: boolean = false,
-  ): void => {
-    const operations: any = this.state.canonicalOperations;
-    const newOperations: any = this.song.createCanonicalPatch(operations, {
+  ): void {
+    const operations: any = state.canonicalOperations;
+    const newOperations: any = songHandle.createCanonicalPatch(operations, {
       raw: patch,
     });
-    const undoStack: IAny[][] = this.state.undoStack.concat([
-      this.state.canonicalOperations,
+    const undoStack: IAny[][] = state.undoStack.concat([
+      state.canonicalOperations,
     ]);
-    this.setState(
-      {
-        canonicalOperations: newOperations,
-        lastPath: null,
-        lastPitch: null,
-        operations: newOperations,
-        redoStack: [],
-        undoStack,
-      },
-      () => {
-        const doc: Document = this.song.getDocument(this.state.operations);
-        const loc: { div: number; measure: number } = this.satieKeyToBeat(
-          doc,
-          doc._visualCursor.key,
-        );
-        if (!loc) {
-          return;
-        }
-      },
-    );
-  };
+    updateState({
+      canonicalOperations: newOperations,
+      lastPath: null,
+      lastPitch: null,
+      operations: newOperations,
+      redoStack: [],
+      undoStack,
+    });
+  }
 
-  private clearPreview = (): void => {
-    this.setState({ operations: this.state.canonicalOperations });
-  };
+  function clearPreview(): void {
+    updateState({ operations: state.canonicalOperations });
+  }
 
-  private generateLy(): string {
-    if (!this.song) {
+  function generateLy(): string {
+    if (!songHandle) {
       // still loading...
       return "";
     }
 
-    const { relativeMode } = this.state;
+    const { relativeMode } = state;
     let prevPitch: Pitch | null = null;
     let prevDuration: Count | null = null;
 
-    const doc: Document = this.song.getDocument(this.state.canonicalOperations);
+    const doc: Document = songHandle.getDocument(state.canonicalOperations);
     let ly = "";
     doc.measures.forEach((measure: IMeasure) => {
       const part: IMeasurePart = measure.parts.P1;
@@ -633,17 +548,17 @@ export default class ToolNoteEdit extends React.Component<
     return ly.trim();
   }
 
-  private getPitch(apitch: Pitch, doc: Document, measure: IMeasure): Pitch {
+  function getPitch(apitch: Pitch, doc: Document, measure: IMeasure): Pitch {
     const pitch: Pitch = {
       alter: apitch.alter,
       octave: apitch.octave,
       step: apitch.step,
     };
-    if (this.state.accidental === MxmlAccidental.Sharp) {
+    if (state.accidental === MxmlAccidental.Sharp) {
       pitch.alter = 1;
-    } else if (this.state.accidental === MxmlAccidental.Flat) {
+    } else if (state.accidental === MxmlAccidental.Flat) {
       pitch.alter = -1;
-    } else if (this.state.accidental === MxmlAccidental.Natural) {
+    } else if (state.accidental === MxmlAccidental.Natural) {
       pitch.alter = undefined;
     } else {
       // Make the alter according to the key signature.
@@ -662,7 +577,7 @@ export default class ToolNoteEdit extends React.Component<
     return pitch;
   }
 
-  private getValidCursorTargetIndecies(
+  function getValidCursorTargetIndecies(
     doc: Document,
     segment: IModel[],
   ): number[] {
@@ -671,7 +586,7 @@ export default class ToolNoteEdit extends React.Component<
     return targetElements.map((el: IModel) => segment.indexOf(el));
   }
 
-  private handleDirectionEvent(
+  function handleDirectionEvent(
     doc: Document,
     measure: IMeasure,
     measureUUID: number,
@@ -702,10 +617,8 @@ export default class ToolNoteEdit extends React.Component<
       div += segment[i].divCount;
     }
 
-    if (this.state.direction) {
-      const direction: Direction = JSON.parse(
-        JSON.stringify(this.state.direction),
-      );
+    if (state.direction) {
+      const direction: Direction = JSON.parse(JSON.stringify(state.direction));
       direction.placement = AboveBelow.Below;
       if (
         direction.directionTypes &&
@@ -728,17 +641,15 @@ export default class ToolNoteEdit extends React.Component<
 
       if (patch) {
         if (isPreview) {
-          this.applyPreviewPatch(patch, path);
+          applyPreviewPatch(patch, path);
         } else {
-          this.applyUndoablePatch(patch);
+          applyUndoablePatch(patch);
         }
 
         return true;
       }
-    } else if (this.state.notation) {
-      const notations: Notations = JSON.parse(
-        JSON.stringify(this.state.notation),
-      );
+    } else if (state.notation) {
+      const notations: Notations = JSON.parse(JSON.stringify(state.notation));
       if (el && doc.modelHasType(el, Type.Chord)) {
         const patch: IAny[] = Patch.createPatch(
           isPreview,
@@ -757,9 +668,9 @@ export default class ToolNoteEdit extends React.Component<
         );
         if (patch) {
           if (isPreview) {
-            this.applyPreviewPatch(patch, path);
+            applyPreviewPatch(patch, path);
           } else {
-            this.applyUndoablePatch(patch);
+            applyUndoablePatch(patch);
           }
 
           return true;
@@ -772,52 +683,49 @@ export default class ToolNoteEdit extends React.Component<
     return false;
   }
 
-  private handleError = (err: Error): void => {
+  function handleError(err: Error): void {
     console.warn(err);
-  };
+  }
 
-  private handleInsertLyClicked = (): void => {
-    this.props.onInsertLy(this.generateLy());
-  };
+  function handleInsertLyClicked(): void {
+    props.onInsertLy(generateLy());
+  }
 
-  private handleKeyDown = (
-    ev: React.KeyboardEvent<HTMLDivElement>,
-  ): boolean => {
-    if (ev.keyCode === 8) {
+  function handleKeyDown(ev: KeyboardEvent<HTMLDivElement>): boolean {
+    if (ev.nativeEvent.isComposing || !songHandle) return true;
+    if (ev.key === "Backspace") {
       // backspace -- prevent navigation in FF and others
       ev.preventDefault();
-    } else if (ev.keyCode === 37) {
+    } else if (ev.key === "ArrowLeft") {
       // left
-      this.moveCursor(-1);
-    } else if (ev.keyCode === 38) {
+      moveCursor(-1);
+    } else if (ev.key === "ArrowUp") {
       // up
-      this.updateOctave(1);
+      updateOctave(1);
       ev.preventDefault();
-    } else if (ev.keyCode === 39) {
+    } else if (ev.key === "ArrowRight") {
       // right
-      this.moveCursor(2);
-    } else if (ev.keyCode === 40) {
+      moveCursor(2);
+    } else if (ev.key === "ArrowDown") {
       // down
-      this.updateOctave(-1);
+      updateOctave(-1);
       ev.preventDefault();
-    } else if (ev.keyCode === 90 /* z */ && (ev.metaKey || ev.ctrlKey)) {
+    } else if (ev.key.toLowerCase() === "z" && (ev.metaKey || ev.ctrlKey)) {
       ev.preventDefault();
       if (ev.shiftKey) {
-        this.redo();
+        redo();
       } else {
-        this.undo();
+        undo();
       }
+    } else if (ev.key.length === 1 && !ev.altKey) {
+      return handleTextInput(ev);
     }
 
     return true;
-  };
+  }
 
-  private handleKeyPress = (
-    ev: React.KeyboardEvent<HTMLDivElement>,
-  ): boolean => {
-    const key: string = (
-      ev.key || String.fromCharCode(ev.keyCode)
-    ).toUpperCase();
+  function handleTextInput(ev: KeyboardEvent<HTMLDivElement>): boolean {
+    const key = ev.key.toUpperCase();
     if (
       (key === "R" || key === "C" || key === "V") &&
       (ev.metaKey || ev.ctrlKey)
@@ -832,30 +740,28 @@ export default class ToolNoteEdit extends React.Component<
       return false;
     }
 
-    if (this.handleKeyPressSetAccidental(key)) {
+    if (handleSetAccidentalKey(key)) {
       return false;
     }
-    if (this.handleKeyPressSetDuration(key)) {
+    if (handleSetDurationKey(key)) {
       return false;
     }
-    if (this.handleKeyPressSetEditType(key)) {
+    if (handleSetEditTypeKey(key)) {
       return false;
     }
     if (key === ".") {
-      this.setDots(((this.state.dots || 0) + 1) % 4);
+      setDots(((state.dots || 0) + 1) % 4);
 
       return false;
     }
 
     if ("ABCDEFG".indexOf(key) !== -1) {
-      const doc: Document = this.song.getDocument(
-        this.state.canonicalOperations,
-      );
+      const doc: Document = songHandle.getDocument(state.canonicalOperations);
       if (!doc._visualCursor) {
         return false;
       }
       if (ev.shiftKey) {
-        this.updateChord(key);
+        updateChord(key);
 
         return false;
       }
@@ -890,7 +796,7 @@ export default class ToolNoteEdit extends React.Component<
         }
       }
 
-      const pitch: Pitch = this.getPitch(
+      const pitch: Pitch = getPitch(
         {
           octave: previousPitch
             ? previousPitch.octave +
@@ -914,21 +820,21 @@ export default class ToolNoteEdit extends React.Component<
                 .at(parseInt(path[5], 10))
                 .insertChord([
                   (note: INoteBuilder): INoteBuilder =>
-                    this.state.accidental
+                    state.accidental
                       ? note
                           .pitch(pitch)
                           .rest(undefined)
-                          .dots(times(this.state.dots, () => ({})))
+                          .dots(times(state.dots, () => ({})))
                           .noteType((noteType: ITypeBuilder) =>
-                            noteType.duration(this.state.note),
+                            noteType.duration(state.note),
                           )
                           .color("#000000")
                       : note
                           .pitch(pitch)
                           .rest(undefined)
-                          .dots(times(this.state.dots, () => ({})))
+                          .dots(times(state.dots, () => ({})))
                           .noteType((noteType: ITypeBuilder) =>
-                            noteType.duration(this.state.note),
+                            noteType.duration(state.note),
                           )
                           .color("#000000"),
                 ])
@@ -936,27 +842,27 @@ export default class ToolNoteEdit extends React.Component<
                 .addVisualCursor(),
             ),
         );
-        this.applyUndoablePatch(patch);
-        this.playNote(pitch);
+        applyUndoablePatch(patch);
+        playNote(pitch);
       }
     }
 
     return true;
-  };
+  }
 
-  private handleKeyPressSetAccidental(key: string): boolean {
+  function handleSetAccidentalKey(key: string): boolean {
     if (key === "=") {
-      this.setAccidental(MxmlAccidental.Sharp);
+      setAccidental(MxmlAccidental.Sharp);
 
       return true;
     }
     if (key === "-") {
-      this.setAccidental(MxmlAccidental.Flat);
+      setAccidental(MxmlAccidental.Flat);
 
       return true;
     }
     if (key === "0") {
-      this.setAccidental(MxmlAccidental.Natural);
+      setAccidental(MxmlAccidental.Natural);
 
       return true;
     }
@@ -964,34 +870,34 @@ export default class ToolNoteEdit extends React.Component<
     return false;
   }
 
-  private handleKeyPressSetDuration(key: string): boolean {
+  function handleSetDurationKey(key: string): boolean {
     if (key === "1") {
-      this.setNote(32);
+      setNote(32);
 
       return true;
     }
     if (key === "2") {
-      this.setNote(16);
+      setNote(16);
 
       return true;
     }
     if (key === "3") {
-      this.setNote(8);
+      setNote(8);
 
       return true;
     }
     if (key === "4") {
-      this.setNote(4);
+      setNote(4);
 
       return true;
     }
     if (key === "5") {
-      this.setNote(2);
+      setNote(2);
 
       return true;
     }
     if (key === "6") {
-      this.setNote(1);
+      setNote(1);
 
       return true;
     }
@@ -999,19 +905,19 @@ export default class ToolNoteEdit extends React.Component<
     return false;
   }
 
-  private handleKeyPressSetEditType(key: string): boolean {
+  function handleSetEditTypeKey(key: string): boolean {
     if (key === "N") {
-      this.setEditType("N");
+      setEditType("N");
 
       return true;
     }
     if (key === "R") {
-      this.setEditType("R");
+      setEditType("R");
 
       return true;
     }
     if (key === "P") {
-      this.setEditType("P");
+      setEditType("P");
 
       return true;
     }
@@ -1019,29 +925,25 @@ export default class ToolNoteEdit extends React.Component<
     return false;
   }
 
-  private handleMouseClick = (ev: IMouseEvent): void => {
-    this.handler(ev, false);
-  };
+  function handleMouseClick(ev: IMouseEvent): void {
+    handler(ev, false);
+  }
 
-  private handleMouseMove = (ev: IMouseEvent): void => {
+  function handleMouseMove(ev: IMouseEvent): void {
     if (
-      isEqual(this.state.lastPath, ev.path) &&
-      isEqual(ev.pitch, this.state.lastPitch)
+      isEqual(state.lastPath, ev.path) &&
+      isEqual(ev.pitch, state.lastPitch)
     ) {
       return;
     }
-    if (!this.handler(ev, true)) {
-      this.clearPreview();
+    if (!handler(ev, true)) {
+      clearPreview();
     }
-  };
+  }
 
-  /**
-   * Changes operations if needed.
-   * Returns whether canoncialOperations were changed.
-   */
-  private handler(ev: IMouseEvent, isPreview: boolean): boolean {
+  function handler(ev: IMouseEvent, isPreview: boolean): boolean {
     const { path } = ev;
-    const doc: Document = this.song.getDocument(this.state.canonicalOperations);
+    const doc: Document = songHandle.getDocument(state.canonicalOperations);
     const measure: IMeasure = find(
       doc.measures,
       (fmeasure: IMeasure) => String(fmeasure.uuid) === path[0],
@@ -1051,70 +953,64 @@ export default class ToolNoteEdit extends React.Component<
     if (!measure || path[1] !== "parts" || !measure.parts[path[2]]) {
       return false;
     }
-    if (this.state.editType === "P") {
-      return this.handleDirectionEvent(
-        doc,
-        measure,
-        measureUUID,
-        ev,
-        isPreview,
-      );
+    if (state.editType === "P") {
+      return handleDirectionEvent(doc, measure, measureUUID, ev, isPreview);
     }
 
     if (path[3] === "voices") {
-      return this.handleVoiceEvent(doc, measure, measureUUID, ev, isPreview);
+      return handleVoiceEvent(doc, measure, measureUUID, ev, isPreview);
     } // this would be where we handled staff events...
 
     return false;
   }
 
-  private handleShowHelpKeyboard = (): void => {
-    this.setState({
+  function handleShowHelpKeyboard(): void {
+    updateState({
       showAdditionalHelp: "keyboard",
     });
-  };
+  }
 
-  private handleShowHelpMIDI = (): void => {
-    this.setState({
+  function handleShowHelpMIDI(): void {
+    updateState({
       showAdditionalHelp: "midi",
     });
-  };
+  }
 
-  private handleShowHelpMouse = (): void => {
-    this.setState({
+  function handleShowHelpMouse(): void {
+    updateState({
       showAdditionalHelp: "mouse",
     });
-  };
+  }
 
-  private handleShowHelpNone = (): void => {
-    this.setState({
+  function handleShowHelpNone(): void {
+    updateState({
       showAdditionalHelp: null,
     });
-  };
+  }
 
-  private handleShowHelpRelative = (): void => {
-    this.setState({
+  function handleShowHelpRelative(): void {
+    updateState({
       showAdditionalHelp: "relative",
     });
-  };
+  }
 
-  private handleShowHelpWhyNotEdit = (): void => {
-    this.setState({
+  function handleShowHelpWhyNotEdit(): void {
+    updateState({
       showAdditionalHelp: "whyNotEdit",
     });
-  };
+  }
 
-  private handleSongScroll = (ev: React.UIEvent<HTMLDivElement>): void => {
+  function handleSongScroll(ev: UIEvent<HTMLDivElement>): void {
     const showHelp: boolean = ev.currentTarget.scrollTop === 0;
 
-    if (showHelp !== this.state.showHelp) {
-      this.setState({
+    if (showHelp !== state.showHelp) {
+      updateState({
         showHelp,
       });
     }
-  };
+  }
 
-  private handleVoiceEvent(
+  function handleVoiceEvent(
     doc: Document,
     measure: IMeasure,
     measureUUID: number,
@@ -1127,7 +1023,7 @@ export default class ToolNoteEdit extends React.Component<
     if (!ev.pitch) {
       return false;
     }
-    const pitch: Pitch = this.getPitch(ev.pitch, doc, measure);
+    const pitch: Pitch = getPitch(ev.pitch, doc, measure);
 
     const voiceSegment: ISegment = part.voices[parseInt(path[4] as string, 10)];
     if (!voiceSegment) {
@@ -1154,8 +1050,8 @@ export default class ToolNoteEdit extends React.Component<
       );
 
     if (
-      (this.state.editType === "N" && chord.length === 1 && chord[0].rest) ||
-      this.state.editType === "R"
+      (state.editType === "N" && chord.length === 1 && chord[0].rest) ||
+      state.editType === "R"
     ) {
       patch = Patch.createPatch(
         isPreview,
@@ -1167,42 +1063,42 @@ export default class ToolNoteEdit extends React.Component<
             1,
             (voice: VoiceBuilder) =>
               voice.note(0, (note: INoteBuilder) =>
-                this.state.editType === "R"
+                state.editType === "R"
                   ? note
                       .pitch(null)
                       .rest({ _force: true } as {})
                       .dots(
-                        times(this.state.dots, () => ({
+                        times(state.dots, () => ({
                           color: isPreview ? "#cecece" : "#000000",
                         })),
                       )
                       .noteType((noteType: ITypeBuilder) =>
-                        noteType.duration(this.state.note),
+                        noteType.duration(state.note),
                       )
                       .color(isPreview ? "#cecece" : "#000000")
-                  : this.state.accidental
+                  : state.accidental
                     ? note
                         .pitch(pitch)
                         .rest(undefined)
                         .dots(
-                          times(this.state.dots, () => ({
+                          times(state.dots, () => ({
                             color: isPreview ? "#cecece" : "#000000",
                           })),
                         )
                         .noteType((noteType: ITypeBuilder) =>
-                          noteType.duration(this.state.note),
+                          noteType.duration(state.note),
                         )
                         .color(isPreview ? "#cecece" : "#000000")
                     : note
                         .pitch(pitch)
                         .rest(undefined)
                         .dots(
-                          times(this.state.dots, () => ({
+                          times(state.dots, () => ({
                             color: isPreview ? "#cecece" : "#000000",
                           })),
                         )
                         .noteType((noteType: ITypeBuilder) =>
-                          noteType.duration(this.state.note),
+                          noteType.duration(state.note),
                         )
                         .color(isPreview ? "#cecece" : "#000000"),
               ),
@@ -1221,15 +1117,15 @@ export default class ToolNoteEdit extends React.Component<
 
       if (!isPreview) {
         // Play the note
-        if (this.state.editType === "N") {
-          this.playNote(pitch);
+        if (state.editType === "N") {
+          playNote(pitch);
         }
       }
     } else if (
-      this.state.editType === "N" &&
+      state.editType === "N" &&
       chord.length &&
       !chord[0].rest &&
-      chord[0].noteType.duration !== this.state.note &&
+      chord[0].noteType.duration !== state.note &&
       isCurrentNote
     ) {
       patch = Patch.createPatch(
@@ -1255,7 +1151,7 @@ export default class ToolNoteEdit extends React.Component<
                         }),
                       )
                       .noteType((noteType: ITypeBuilder) =>
-                        noteType.duration(this.state.note),
+                        noteType.duration(state.note),
                       )
                       .color(isPreview ? "#cecece" : "#000000"),
                   ),
@@ -1265,7 +1161,7 @@ export default class ToolNoteEdit extends React.Component<
           ),
       );
     } else if (
-      this.state.editType === "N" &&
+      state.editType === "N" &&
       chord.length &&
       !chord[0].rest &&
       !isCurrentNote
@@ -1301,15 +1197,15 @@ export default class ToolNoteEdit extends React.Component<
       );
 
       if (!isPreview) {
-        this.playNote(pitch);
-        forEach(chord, (note: Note) => this.playNote(note.pitch));
+        playNote(pitch);
+        forEach(chord, (note: Note) => playNote(note.pitch));
       }
     }
     if (patch) {
       if (isPreview) {
-        this.applyPreviewPatch(patch, path, pitch);
+        applyPreviewPatch(patch, path, pitch);
       } else {
-        this.applyUndoablePatch(patch);
+        applyUndoablePatch(patch);
       }
 
       return true;
@@ -1318,8 +1214,8 @@ export default class ToolNoteEdit extends React.Component<
     return false;
   }
 
-  private moveCursor = (direction: number): boolean => {
-    const doc: Document = this.song.getDocument(this.state.canonicalOperations);
+  function moveCursor(direction: number): boolean {
+    const doc: Document = songHandle.getDocument(state.canonicalOperations);
     if (!doc._visualCursor) {
       return true;
     }
@@ -1339,7 +1235,7 @@ export default class ToolNoteEdit extends React.Component<
 
     const currSegment: ISegment = currMeasure.parts[part].voices[voiceNum];
 
-    const targetIndecies: number[] = this.getValidCursorTargetIndecies(
+    const targetIndecies: number[] = getValidCursorTargetIndecies(
       doc,
       currSegment,
     );
@@ -1358,13 +1254,13 @@ export default class ToolNoteEdit extends React.Component<
     );
     if (nextIdx === null) {
       if (direction > 0) {
-        this.moveCursorToStartOfMeasure(
+        moveCursorToStartOfMeasure(
           part,
           voiceNum,
           doc.measures[currMeasure.idx + 1],
         );
       } else if (direction < 0) {
-        this.moveCursorToEndOfMeasure(
+        moveCursorToEndOfMeasure(
           part,
           voiceNum,
           doc.measures[currMeasure.idx - 1],
@@ -1383,18 +1279,18 @@ export default class ToolNoteEdit extends React.Component<
             voice.at(nextIdx).addVisualCursor(),
           ),
       );
-      this.applyUndoablePatch(patch);
+      applyUndoablePatch(patch);
     }
 
     return false;
-  };
+  }
 
-  private moveCursorToEndOfMeasure(
+  function moveCursorToEndOfMeasure(
     part: string,
     voiceNum: number,
     measure: IMeasure,
   ): void {
-    this.moveInMeasure(
+    moveInMeasure(
       part,
       voiceNum,
       measure,
@@ -1402,15 +1298,15 @@ export default class ToolNoteEdit extends React.Component<
     );
   }
 
-  private moveCursorToStartOfMeasure(
+  function moveCursorToStartOfMeasure(
     part: string,
     voiceNum: number,
     measure: IMeasure,
   ): void {
-    this.moveInMeasure(part, voiceNum, measure, first);
+    moveInMeasure(part, voiceNum, measure, first);
   }
 
-  private moveInMeasure(
+  function moveInMeasure(
     part: string,
     voiceNum: number,
     measure: IMeasure,
@@ -1419,8 +1315,8 @@ export default class ToolNoteEdit extends React.Component<
     if (!measure) {
       return;
     }
-    const doc: Document = this.song.getDocument(this.state.canonicalOperations);
-    const targetIndecies: number[] = this.getValidCursorTargetIndecies(
+    const doc: Document = songHandle.getDocument(state.canonicalOperations);
+    const targetIndecies: number[] = getValidCursorTargetIndecies(
       doc,
       measure.parts[part].voices[voiceNum],
     );
@@ -1435,19 +1331,19 @@ export default class ToolNoteEdit extends React.Component<
           voice.at(nextIdx).addVisualCursor(),
         ),
     );
-    this.applyUndoablePatch(patch);
+    applyUndoablePatch(patch);
   }
 
-  private newMeasure: () => void = (): void => {
-    const doc: Document = this.song.getDocument(this.state.canonicalOperations);
+  function newMeasure(): void {
+    const doc: Document = songHandle.getDocument(state.canonicalOperations);
     const measureCount: number = doc.measures.length;
     const measureUUID: number = doc.measures[doc.measures.length - 1].uuid;
     const measureIdx: number = doc.measures.findIndex(
       (m: IMeasure) => m.uuid === measureUUID,
     );
 
-    const undoStack: IAny[][] = this.state.undoStack.concat([
-      this.state.canonicalOperations,
+    const undoStack: IAny[][] = state.undoStack.concat([
+      state.canonicalOperations,
     ]);
 
     const barlineIdx: number = findIndex(
@@ -1455,8 +1351,8 @@ export default class ToolNoteEdit extends React.Component<
       (el: IModel) => doc.modelHasType(el, Type.Barline),
     );
 
-    const operations: any = this.song.createCanonicalPatch(
-      this.state.canonicalOperations,
+    const operations: any = songHandle.createCanonicalPatch(
+      state.canonicalOperations,
       {
         documentBuilder: (document: DocumentBuilder): DocumentBuilder =>
           document
@@ -1504,199 +1400,130 @@ export default class ToolNoteEdit extends React.Component<
             ),
       },
     );
-    this.setState({
+    updateState({
       canonicalOperations: operations,
       operations,
       redoStack: [],
       undoStack,
     });
-  };
+  }
 
-  private playNote(pitch: Pitch): void {
+  function playNote(pitch: Pitch): void {
     console.log("TODO: play", pitch);
   }
 
-  private redo: () => void = (): void => {
-    this.setState({
-      canonicalOperations:
-        this.state.redoStack[this.state.redoStack.length - 1],
-      operations: this.state.redoStack[this.state.redoStack.length - 1],
-      redoStack: this.state.redoStack.slice(0, this.state.redoStack.length - 1),
-      undoStack: this.state.undoStack.concat(this.state.operations),
+  function redo(): void {
+    updateState({
+      canonicalOperations: state.redoStack[state.redoStack.length - 1],
+      operations: state.redoStack[state.redoStack.length - 1],
+      redoStack: state.redoStack.slice(0, state.redoStack.length - 1),
+      undoStack: state.undoStack.concat(state.operations),
     });
-  };
+  }
 
-  private renderAdditionalHelp(): JSX.Element {
-    if (this.state.showAdditionalHelp === null) {
+  function renderAdditionalHelp() {
+    if (state.showAdditionalHelp === null) {
       return null;
     }
 
     return (
       <NoteAdditionalHelp
-        kind={this.state.showAdditionalHelp}
-        onHide={this.handleShowHelpNone}
+        kind={state.showAdditionalHelp}
+        onHide={handleShowHelpNone}
       />
     );
   }
 
-  private renderPalette(): JSX.Element {
+  function renderPalette() {
     return (
       <NotePalette
-        accidental={this.state.accidental}
-        direction={this.state.direction}
-        dots={this.state.dots}
-        editType={this.state.editType}
-        notation={this.state.notation}
-        note={this.state.note}
-        redo={this.redo}
-        setAccidental={this.setAccidental}
-        setDirection={this.setDirection}
-        setTimeModification={this.setTimeModification}
-        setDots={this.setDots}
-        setEditType={this.setEditType}
-        setNotation={this.setNotation}
-        setNote={this.setNote}
-        timeModification={this.state.timeModification}
-        newMeasure={this.newMeasure}
-        undo={this.undo}
+        accidental={state.accidental}
+        direction={state.direction}
+        dots={state.dots}
+        editType={state.editType}
+        notation={state.notation}
+        note={state.note}
+        redo={redo}
+        setAccidental={setAccidental}
+        setDirection={setDirection}
+        setTimeModification={setTimeModification}
+        setDots={setDots}
+        setEditType={setEditType}
+        setNotation={setNotation}
+        setNote={setNote}
+        timeModification={state.timeModification}
+        newMeasure={newMeasure}
+        undo={undo}
       />
     );
   }
 
-  private satieKeyToBeat(
-    doc: Document,
-    key: string,
-  ): { div: number; measure: number } {
-    const path: string[] = key.replace("SATIE", "").split("_");
-
-    const measureUUID: number = parseInt(path[0], 10);
-    const part: string = path[2];
-    if (path[3] !== "voices") {
-      return null;
-    }
-    const voiceNum: number = parseInt(path[4], 10);
-    const elIdx: number = parseInt(path[5], 10);
-    const measure: IMeasure = doc.measures.find(
-      (i: IMeasure) => i.uuid === measureUUID,
-    );
-
-    const currSegment: ISegment = measure.parts[part].voices[voiceNum];
-    let div = 0;
-    for (let i = 0; i < elIdx && i < currSegment.length; i += 1) {
-      div += currSegment[i].divCount;
-    }
-
-    return {
-      div,
-      measure: measure.idx,
-    };
-  }
-
-  private setAccidental: (accidental: MxmlAccidental) => void = (
-    accidental,
-  ): void => {
-    if (this.state.accidental === accidental && this.state.editType === "N") {
-      this.setState({
+  function setAccidental(accidental): void {
+    if (state.accidental === accidental && state.editType === "N") {
+      updateState({
         accidental: null,
         editType: "N",
       });
     } else {
-      this.setState({
+      updateState({
         accidental,
         editType: "N",
       });
     }
-  };
+  }
 
-  private setDirection: (direction: Direction) => void = (direction) => {
-    this.setState({
+  function setDirection(direction) {
+    updateState({
       direction,
       notation: null,
     });
-  };
+  }
 
-  private setDots = (dots: number): void => {
-    this.setState({
+  function setDots(dots: number): void {
+    updateState({
       dots,
-      editType: this.state.editType === "R" ? "R" : "N",
+      editType: state.editType === "R" ? "R" : "N",
     });
-  };
+  }
 
-  private setEditType: (editType: "N" | "R" | "P") => void = (
-    editType,
-  ): void => {
-    this.setState({
+  function setEditType(editType): void {
+    updateState({
       editType,
     });
-  };
+  }
 
-  private setNotation: (notations: Notations) => void = (notation) => {
-    this.setState({
+  function setNotation(notation) {
+    updateState({
       direction: null,
       notation,
     });
-  };
+  }
 
-  private setNote: (note: number) => void = (note): void => {
-    this.setState({
-      editType: this.state.editType === "R" ? "R" : "N",
+  function setNote(note): void {
+    updateState({
+      editType: state.editType === "R" ? "R" : "N",
       note,
     });
-  };
+  }
 
-  private setSongRef = (song: ISong): void => {
-    this.song = song;
-    if (song) {
-      const doc: Document = song.getDocument(this.state.canonicalOperations);
-      const patch: IAny[] = Patch.createPatch(
-        false,
-        doc,
-        doc.measures[0].uuid,
-        "P1",
-        (part: PartBuilder): PartBuilder =>
-          part
-            .staff(
-              1,
-              (staff: StaffBuilder): StaffBuilder =>
-                staff
-                  .at(1)
-                  .attributes(
-                    (attributes: IAttributesBuilder): IAttributesBuilder =>
-                      attributes
-                        .clefs([this.props.clef])
-                        .keySignatures([this.props.keySig])
-                        .times([this.props.time]),
-                  ),
-            )
-            .voice(
-              1,
-              (voice: VoiceBuilder): VoiceBuilder =>
-                voice.at(0).addVisualCursor(),
-            ),
-      );
-      this.applyUndoablePatch(patch);
-    }
-  };
-
-  private setTimeModification = (timeModification: TimeModification): void => {
-    this.setState({
-      editType: this.state.editType === "R" ? "R" : "N",
+  function setTimeModification(timeModification: TimeModification): void {
+    updateState({
+      editType: state.editType === "R" ? "R" : "N",
       timeModification,
     });
-  };
+  }
 
-  private undo: () => void = (): void => {
-    this.setState({
-      canonicalOperations:
-        this.state.undoStack[this.state.undoStack.length - 1],
-      operations: this.state.undoStack[this.state.undoStack.length - 1],
-      redoStack: this.state.redoStack.concat(this.state.operations),
-      undoStack: this.state.undoStack.slice(0, this.state.undoStack.length - 1),
+  function undo(): void {
+    updateState({
+      canonicalOperations: state.undoStack[state.undoStack.length - 1],
+      operations: state.undoStack[state.undoStack.length - 1],
+      redoStack: state.redoStack.concat(state.operations),
+      undoStack: state.undoStack.slice(0, state.undoStack.length - 1),
     });
-  };
+  }
 
-  private updateChord = (newNote: string): boolean => {
-    const doc: Document = this.song.getDocument(this.state.canonicalOperations);
+  function updateChord(newNote: string): boolean {
+    const doc: Document = songHandle.getDocument(state.canonicalOperations);
     if (!doc._visualCursor) {
       return false;
     }
@@ -1745,7 +1572,7 @@ export default class ToolNoteEdit extends React.Component<
     }
 
     if (oldPitch) {
-      const newPitch: Pitch = this.getPitch(
+      const newPitch: Pitch = getPitch(
         {
           octave: oldPitch
             ? oldPitch.octave + getOctaveDifference(oldPitch.step, newNote)
@@ -1776,17 +1603,17 @@ export default class ToolNoteEdit extends React.Component<
               ),
           ),
       );
-      this.applyUndoablePatch(patch);
-      this.playNote(newPitch);
+      applyUndoablePatch(patch);
+      playNote(newPitch);
 
       return true;
     }
 
     return false;
-  };
+  }
 
-  private updateOctave = (octave: number): boolean => {
-    const doc: Document = this.song.getDocument(this.state.canonicalOperations);
+  function updateOctave(octave: number): boolean {
+    const doc: Document = songHandle.getDocument(state.canonicalOperations);
     if (!doc._visualCursor) {
       return false;
     }
@@ -1850,14 +1677,115 @@ export default class ToolNoteEdit extends React.Component<
               ),
           ),
       );
-      this.applyUndoablePatch(patch);
-      this.playNote(updatedPitch);
+      applyUndoablePatch(patch);
+      playNote(updatedPitch);
 
       return true;
     }
 
     return false;
-  };
+  }
+
+  const { editType } = state;
+  const tallPalette: boolean = editType === "P";
+
+  const song = state.src ? (
+    <Song
+      baseSrc={state.src}
+      onError={handleError}
+      patches={state.operations}
+      onMouseClick={handleMouseClick}
+      onMouseMove={handleMouseMove}
+      pageClassName={cn(styles.song)}
+      ref={setSongRef}
+    />
+  ) : null;
+
+  return (
+    <div
+      ref={domNode}
+      className={cn(makelilyStyles.tool)}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      role="textbox"
+    >
+      <div
+        className={cn(
+          makelilyStyles.help,
+          state.showHelp && makelilyStyles.helpVisible,
+          "inline-flex",
+        )}
+      >
+        <Info size="1em" className="self-center mr-1 inline" />
+        <span>
+          {" "}
+          Generate markup
+          <sup>
+            <a href="#" onClick={handleShowHelpWhyNotEdit} role="button">
+              ?
+            </a>
+          </sup>{" "}
+          for notes in your song using a{" "}
+          <a href="#" onClick={handleShowHelpMouse} role="button">
+            mouse
+          </a>
+          ,{" "}
+          <a href="#;" onClick={handleShowHelpKeyboard} role="button">
+            computer keyboard
+          </a>
+          , or{" "}
+          <a href="#;" onClick={handleShowHelpMIDI} role="button">
+            MIDI keyboard
+          </a>
+        </span>
+        .
+      </div>
+
+      {renderAdditionalHelp()}
+      {renderPalette()}
+      <div className={cn(makelilyStyles.section, "bg-white")}>
+        <div
+          className={cn(
+            styles.songContainer,
+            tallPalette && styles.songContainerSmall,
+          )}
+          onScroll={handleSongScroll}
+        >
+          {song}
+        </div>
+      </div>
+      <div className={cn(makelilyStyles.spacer)} />
+      <div className={cn(makelilyStyles.section)}>
+        <span className={cn(makelilyStyles.outputOptions)}>
+          <input
+            type="checkbox"
+            checked={state.relativeMode}
+            onChange={(): void =>
+              updateState({ relativeMode: !state.relativeMode })
+            }
+            aria-checked={false}
+            id="toolnoteedit-relative"
+          />
+          <label htmlFor="toolnoteedit-relative">
+            <code>\relative</code> mode
+            <sup>
+              <a href="#" onClick={handleShowHelpRelative} role="button">
+                ?
+              </a>
+            </sup>{" "}
+          </label>
+        </span>
+        <pre className={cn(makelilyStyles.lyPreview)}>{generateLy()}</pre>
+
+        <button
+          className={cn(makelilyStyles.insert)}
+          onClick={handleInsertLyClicked}
+        >
+          Insert this code into Hacklily
+        </button>
+      </div>
+    </div>
+  );
 }
 
 const styles = {

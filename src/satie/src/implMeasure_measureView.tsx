@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
+import { chain, flatten, forEach, map, mapValues } from "lodash";
 /* eslint-disable no-shadow */
-
-import invariant from "invariant";
-import { chain, flatten, mapValues, map, forEach } from "lodash";
-import * as PropTypes from "prop-types";
-import * as React from "react";
-import { Component } from "react";
+import { memo, useContext } from "react";
 
 import type { ILayout } from "./document";
 import ModelView from "./implSegment_modelView";
 import type { IMeasureLayout } from "./private_measureLayout";
+import type { RenderContextValue } from "./private_renderContext";
+import { RenderContext } from "./private_renderContext";
 import { MAX_SAFE_INTEGER } from "./private_util";
 
 export interface IProps {
@@ -20,51 +18,12 @@ export interface IProps {
   version: number;
 }
 
-const NUMBER_ARRAY = PropTypes.arrayOf(PropTypes.number);
-
-export default class MeasureView extends Component<IProps, {}> {
-  static childContextTypes = {
-    originYByPartAndStaff: PropTypes.objectOf(NUMBER_ARRAY).isRequired,
-    systemBottom: PropTypes.number.isRequired,
-    systemTop: PropTypes.number.isRequired,
-  } as any;
-
-  static contextTypes = {
-    originY: PropTypes.number,
-  } as any;
-
-  declare context: {
-    originY: number;
-  };
-
-  render(): any {
-    const layout = this.props.layout;
-
-    return (
-      <g transform={`translate(${layout.originX})`}>
-        {chain(flatten(layout.elements))
-          .filter((layout: ILayout) => !!layout.model) // Remove helpers.
-          .map((layout: ILayout) => (
-            <ModelView
-              key={(layout as any).key}
-              version={this.props.layout.getVersion()}
-              layout={layout}
-              originX={this.props.layout.originX}
-            />
-          ))
-          .value()}
-      </g>
-    );
-
-    /* TODO: lyric boxes */
-    /* TODO: free boxes */
-    /* TODO: slurs and ties */
-  }
-
-  getChildContext() {
-    const { layout } = this.props;
+function MeasureView(props: IProps) {
+  const renderContext = useContext(RenderContext);
+  function getRenderContext(): RenderContextValue {
+    const { layout } = props;
     const originYByPartAndStaff = mapValues(layout.originY, (layouts) =>
-      this.extractOrigins(layouts),
+      extractOrigins(layouts),
     );
     let bottom = MAX_SAFE_INTEGER;
     let top = 0;
@@ -82,29 +41,50 @@ export default class MeasureView extends Component<IProps, {}> {
     // TODO 2: Do not ignore top/bottom staff in staffGroup of attributes
     // TODO 3: A part can be in many groups.
     return {
+      ...renderContext,
       originYByPartAndStaff: originYByPartAndStaff,
-      systemBottom: this.context.originY - bottom + 20.5,
-      systemTop: this.context.originY - top - 20.5,
+      systemBottom: renderContext.originY - bottom + 20.5,
+      systemTop: renderContext.originY - top - 20.5,
     };
   }
 
-  extractOrigins(layouts: number[]) {
-    return map(layouts, (layout) => this.invert(layout));
+  function extractOrigins(layouts: number[]) {
+    return map(layouts, (layout) => invert(layout));
   }
 
-  invert(y: number) {
-    return this.context.originY - y;
+  function invert(y: number) {
+    return renderContext.originY - y;
   }
 
-  shouldComponentUpdate(nextProps: IProps) {
-    invariant(
-      !isNaN(this.props.version),
-      `Invalid non-numeric version ${this.props.version}`,
-    );
-    return (
-      this.props.version !== nextProps.version ||
-      this.props.layout.originX !== nextProps.layout.originX ||
-      this.props.layout.width !== nextProps.layout.width
-    );
-  }
+  const layout = props.layout;
+
+  return (
+    <RenderContext value={getRenderContext()}>
+      <g transform={`translate(${layout.originX})`}>
+        {chain(flatten(layout.elements))
+          .filter((layout: ILayout) => !!layout.model) // Remove helpers.
+          .map((layout: ILayout) => (
+            <ModelView
+              key={(layout as any).key}
+              version={props.layout.getVersion()}
+              layout={layout}
+              originX={props.layout.originX}
+            />
+          ))
+          .value()}
+      </g>
+    </RenderContext>
+  );
+
+  /* TODO: lyric boxes */
+  /* TODO: free boxes */
+  /* TODO: slurs and ties */
 }
+
+export default memo(
+  MeasureView,
+  (previous, next) =>
+    previous.version === next.version &&
+    previous.layout.originX === next.layout.originX &&
+    previous.layout.width === next.layout.width,
+);

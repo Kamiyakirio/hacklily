@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import React from "react";
-
 import { cn } from "../lib/utils";
 import makelilyStyles from "./makelilyStyles";
-import type { MakelilyToolProps } from "./MakelilyToolProps";
 
 /**
  * Placeholder for when an error was caught.
  */
-const ToolError: React.FC<MakelilyToolProps> = () => {
+const ToolError = () => {
   return (
     <span className={cn(makelilyStyles.tool)}>
       <div className={cn(makelilyStyles.section)}>

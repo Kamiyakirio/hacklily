@@ -180,12 +180,14 @@ describe("Preview DOMPurify sanitization", () => {
     expect(clean).toContain('pointer-events="all"');
   });
 
-  test("strips pointer-events when ADD_ATTR is removed (safety net)", () => {
-    // Double-check that pointer-events is not in DOMPurify's default SVG attrs
-    const clean = DOMPurify.sanitize(
-      `<svg xmlns="http://www.w3.org/2000/svg"><g pointer-events="all"><circle cx="5" cy="5" r="3"/></g></svg>`,
+  test("preserves pointer-events while stripping event handlers in the preview", () => {
+    const clean = sanitizeSvg(
+      `<svg xmlns="http://www.w3.org/2000/svg"><g pointer-events="all" onclick="alert(1)"><circle cx="5" cy="5" r="3"/></g></svg>`,
+      "pointer-",
     );
-    expect(clean.toLowerCase()).not.toContain("pointer-events");
+    expect(clean).toContain('pointer-events="all"');
+    expect(clean.toLowerCase()).not.toContain("onclick");
+    expect(clean).not.toContain("alert");
   });
 });
 

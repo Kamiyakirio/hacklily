@@ -5,9 +5,10 @@ import * as fs from "fs";
 import * as os from "os";
 import * as pathUtil from "path";
 
+// TypeScript 7 provides the native CLI; this generator needs the legacy compiler API.
+import * as ts from "@typescript/typescript6";
 import { flatten, find } from "lodash";
 import * as mkdirp from "mkdirp";
-import * as ts from "typescript";
 
 type SyntaxKind = ts.SyntaxKind;
 const SyntaxKind = ts.SyntaxKind;

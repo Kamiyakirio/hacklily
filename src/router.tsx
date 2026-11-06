@@ -3,8 +3,8 @@
 
 // TanStack Router root configuration.
 
-import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import type { NotFoundRouteProps } from "@tanstack/react-router";
+import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 
 import { routeTree } from "./routeTree.gen";
 

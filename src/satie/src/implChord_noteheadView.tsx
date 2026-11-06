@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2015-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import * as PropTypes from "prop-types";
-import * as React from "react";
-import { Component } from "react";
+import { useContext } from "react";
 
-import type { Position, Notehead } from "#/musicxml-interfaces";
+import type { Notehead, Position } from "#/musicxml-interfaces";
 
+import { RenderContext } from "./private_renderContext";
 import Glyph from "./private_views_glyph";
 
 export interface IProps {
@@ -18,28 +17,20 @@ export interface IProps {
 /**
  * Renders a notehead.
  */
-export default class NoteheadView extends Component<IProps, {}> {
-  static contextTypes = {
-    originY: PropTypes.number.isRequired,
-  } as any;
+export default function NoteheadView(props: IProps) {
+  const renderContext = useContext(RenderContext);
 
-  declare context: {
-    originY: number;
-  };
+  const spec = props.spec;
+  const pos = spec as Position;
+  const head = spec as Notehead;
 
-  render(): any {
-    const spec = this.props.spec;
-    const pos = spec as Position;
-    const head = spec as Notehead;
-
-    return (
-      <Glyph
-        fill={head.color}
-        glyphName={this.props.notehead}
-        // scale: this.props.grace ? 0.6 : 1.0,
-        x={pos.defaultX + (pos.relativeX || 0)}
-        y={this.context.originY - pos.defaultY - (pos.relativeY || 0)}
-      />
-    );
-  }
+  return (
+    <Glyph
+      fill={head.color}
+      glyphName={props.notehead}
+      // scale: this.props.grace ? 0.6 : 1.0,
+      x={pos.defaultX + (pos.relativeX || 0)}
+      y={renderContext.originY - pos.defaultY - (pos.relativeY || 0)}
+    />
+  );
 }
