@@ -212,6 +212,9 @@ export default function Editor({ ref, ...props }: Props) {
     registeredMonacoComponents = true;
 
     monacoModule.languages.register({ id: "lilypond" });
+    monacoModule.languages.setLanguageConfiguration("lilypond", {
+      comments: { lineComment: "%", blockComment: ["%{", "%}"] },
+    });
     monacoModule.languages.setMonarchTokensProvider(
       "lilypond",
       LILYPOND_MONARCH_PROVIDER,
@@ -230,12 +233,6 @@ export default function Editor({ ref, ...props }: Props) {
     selectAll,
   }));
 
-  useEffect(() => {
-    if (!editorInstance) return;
-    const resize = () => editorInstance.layout();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, [editorInstance]);
   useEffect(() => {
     editorInstance?.layout();
   }, [editorInstance, props.mode]);
@@ -283,23 +280,28 @@ export default function Editor({ ref, ...props }: Props) {
   }, [editorInstance, props.logs]);
 
   const { code, mode, onSetCode } = props;
-  const monacoOptions: monacoEditor.editor.IEditorOptions = {
-    autoClosingBrackets: "always",
-    minimap: {
-      enabled: false,
-    },
+  const monacoOptions: monacoEditor.editor.IStandaloneEditorConstructionOptions =
+    {
+      automaticLayout: true,
+      autoClosingBrackets: "always",
+      minimap: {
+        enabled: false,
+      },
 
-    selectionHighlight: false,
-  };
+      selectionHighlight: false,
+    };
 
-  const width = mode === MODE_EDIT ? "100%" : "50%";
+  const width = mode === MODE_EDIT ? "100%" : "var(--editor-width, 50%)";
 
   if (code === null || code === undefined) {
     return null;
   }
 
   return (
-    <div className={cn("monaco", mode === MODE_VIEW && APP_STYLE.monacoHidden)}>
+    <div
+      className={cn("monaco", mode === MODE_VIEW && APP_STYLE.monacoHidden)}
+      style={{ width }}
+    >
       <ReactMonacoEditor
         editorDidMount={handleEditorDidMount}
         editorWillMount={handleEditorWillMount}
@@ -310,7 +312,7 @@ export default function Editor({ ref, ...props }: Props) {
         options={monacoOptions}
         theme={props.colourScheme === "dark" ? "vs-dark" : "vs"}
         value={code}
-        width={width}
+        width="100%"
       />
     </div>
   );

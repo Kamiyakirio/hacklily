@@ -76,6 +76,7 @@ interface Props {
   onSaveAs(): void;
   onImportMusicXML(): void;
   onShowAbout(): void;
+  onShowFileAssociations(): void;
 }
 
 interface State {
@@ -278,6 +279,7 @@ export default function Header(props: Props) {
     onExportMIDI,
     onExportPDF,
     onShowAbout,
+    onShowFileAssociations,
     onShowOpen,
     onShowNew,
     onSave,
@@ -362,6 +364,7 @@ export default function Header(props: Props) {
                 onExportMIDI={onExportMIDI}
                 onExportPDF={onExportPDF}
                 onShowAbout={onShowAbout}
+                onShowFileAssociations={onShowFileAssociations}
                 onShowOpen={onShowOpen}
                 onSave={onSave}
                 onSaveAs={onSaveAs}

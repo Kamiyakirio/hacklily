@@ -11,6 +11,8 @@ const native = vi.hoisted(() => ({
   destroy: vi.fn(),
   setTitle: vi.fn(),
   onCloseRequested: vi.fn(),
+  watchOpenRequests: vi.fn(),
+  openScorePath: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true }));
 vi.mock("@tauri-apps/api/window", () => ({
@@ -43,6 +45,8 @@ vi.mock("#/lib/NativeRenderer", () => ({
   },
   prepareEngine: native.prepareEngine,
   openScore: native.openScore,
+  openScorePath: native.openScorePath,
+  watchOpenRequests: native.watchOpenRequests,
   saveScore: native.saveScore,
   importMusicXML: vi.fn(),
   saveExport: vi.fn(),
@@ -53,12 +57,17 @@ vi.mock("#/lib/NativeRenderer", () => ({
 describe("desktop local documents", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
+  let receivePaths: (paths: string[]) => void;
   beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.clearAllMocks();
     localStorage.clear();
     native.prepareEngine.mockResolvedValue({ version: "2.26.0" });
     native.onCloseRequested.mockResolvedValue(vi.fn());
+    native.watchOpenRequests.mockImplementation((receive) => {
+      receivePaths = receive;
+      return vi.fn();
+    });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -115,6 +124,50 @@ describe("desktop local documents", () => {
       "local music",
       "C:/Music/local.ly",
     );
+  });
+
+  it("opens queued associated files after protecting unsaved work", async () => {
+    restoreDraft();
+    native.openScorePath.mockImplementation(async (path) => ({
+      path,
+      src: `Source of ${path}`,
+    }));
+    await show();
+    await act(async () =>
+      receivePaths(["C:/Music/乐谱 one.ly", "C:/Music/second.ly"]),
+    );
+    expect(document.body.textContent).toContain("Unsaved changes");
+    expect(container.querySelector("textarea").value).toBe("edited");
+    const discard = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent.trim() === "Discard changes",
+    );
+    await act(async () => discard.click());
+    expect(container.querySelector("textarea").value).toBe(
+      "Source of C:/Music/second.ly",
+    );
+    expect(native.openScore).not.toHaveBeenCalled();
+    expect(native.openScorePath).toHaveBeenCalledWith("C:/Music/乐谱 one.ly");
+    await shortcut("s");
+    expect(native.saveScore).toHaveBeenCalledWith(
+      "Source of C:/Music/second.ly",
+      "C:/Music/second.ly",
+    );
+  });
+
+  it("retains the current document if the user cancels an associated-file open", async () => {
+    restoreDraft();
+    native.openScorePath.mockResolvedValue({
+      path: "C:/Music/incoming.ly",
+      src: "incoming",
+    });
+    await show();
+    await act(async () => receivePaths(["C:/Music/incoming.ly"]));
+    const cancel = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent.trim() === "Cancel",
+    );
+    await act(async () => cancel.click());
+    expect(container.querySelector("textarea").value).toBe("edited");
+    expect(document.body.textContent).not.toContain("Unsaved changes");
   });
 
   it("keeps the current document when saving before a new document is cancelled", async () => {

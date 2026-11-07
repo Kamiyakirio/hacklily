@@ -51,6 +51,14 @@ GitHub login, publishing, and the online file library have been removed. The des
 
 LilyPond can execute Scheme embedded in scores. Compile only scores you trust; local compilation runs with the desktop user's permissions.
 
+## File associations
+
+Use **File → .ly file association…** to set Hacklily as the default LilyPond editor or cancel the association. Double-clicking a score opens it in the existing window; unsaved changes are checked before replacing the current document. Paths containing spaces and Unicode are supported.
+
+- **Windows:** registers Hacklily for the current user without changing another application's defaults. Windows requires confirmation in its Default Apps settings. When cancelling, select the previous application in Settings; returning to Hacklily finishes removing its registration. The previous application's name is shown in the dialog. The uninstaller cleans up this installation's optional registration.
+- **macOS:** the installed `.app` declares `.ly` document support. Registering selects it through Launch Services; cancelling restores the previous application, or the default text editor if `.ly` had no handler. Finder's Open With menu continues to list the installed app. Run the packaged `.app`, rather than a development executable, to manage associations.
+- **Linux:** creates per-user XDG desktop and MIME entries, records the previous `text/x-lilypond` handler, and selects Hacklily with `xdg-mime`. Cancelling removes these entries and restores the previous handler, preserving a different app chosen since registration. Requires `xdg-utils`, `shared-mime-info`, and `desktop-file-utils`; XDG directory overrides and AppImage paths are supported.
+
 ## Build and validation
 
 ```bash

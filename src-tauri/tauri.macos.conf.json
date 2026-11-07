@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": ["ly"],
+        "name": "LilyPond score",
+        "role": "Editor",
+        "rank": "Alternate",
+        "mimeType": "text/x-lilypond",
+        "exportedType": {
+          "identifier": "org.hacklily.lilypond-source",
+          "conformsTo": ["public.text"]
+        }
+      }
+    ]
+  }
+}

@@ -36,6 +36,7 @@ interface Props {
   onExportPDF(): void;
   onExportMIDI(): void;
   onShowAbout(): void;
+  onShowFileAssociations(): void;
 }
 
 export default memo(function FileMenu(props: Props) {
@@ -86,6 +87,9 @@ export default memo(function FileMenu(props: Props) {
         </DropdownMenuSubContent>
       </DropdownMenuSub>
       <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={props.onShowFileAssociations}>
+        <FileText size="1em" /> .ly file association…
+      </DropdownMenuItem>
       <DropdownMenuItem
         onClick={() =>
           openExternal(

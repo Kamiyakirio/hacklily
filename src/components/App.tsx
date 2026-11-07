@@ -18,17 +18,21 @@ import NativeRenderer, {
   encodeBytes,
   importMusicXML,
   openScore,
+  openScorePath,
   prepareEngine,
   saveExport,
   saveScore,
+  watchOpenRequests,
 } from "#/lib/NativeRenderer";
-import type { EngineProgress } from "#/lib/NativeRenderer";
+import type { EngineProgress, ScoreFile } from "#/lib/NativeRenderer";
 
 import type { EditorHandle, MakelilyProps } from "./Editor";
 import Editor from "./Editor";
+import EditorPreviewLayout from "./EditorPreviewLayout";
 import type { ViewMode } from "./Header";
 import Header, { MIN_BOTH_WIDTH, MODE_BOTH, MODE_VIEW } from "./Header";
 import ModalAbout from "./ModalAbout";
+import ModalFileAssociations from "./ModalFileAssociations";
 import ModalUnsavedChangesInterstitial from "./ModalUnsavedChangesInterstitial";
 import Preview from "./Preview";
 import { Button } from "./ui/button";
@@ -55,7 +59,7 @@ interface Score {
   savedSrc: string;
   includeDir: string | null;
 }
-type Action = "new" | "open" | "import" | "close";
+type Action = "new" | "open" | "import" | "close" | { file: ScoreFile };
 
 function newScore(): Score {
   return {
@@ -118,6 +122,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<Action | null>(null);
   const [about, setAbout] = useState(false);
+  const [associations, setAssociations] = useState(false);
+  const [openPaths, setOpenPaths] = useState<string[]>([]);
   const [tool, setTool] = useState<
     | (MakelilyProps & {
         name: string;
@@ -239,13 +245,18 @@ export default function App() {
     setBusy(true);
     setError(null);
     try {
+      const opening = action === "open" || typeof action === "object";
       const file =
-        action === "open" ? await openScore() : await importMusicXML();
+        typeof action === "object"
+          ? action.file
+          : action === "open"
+            ? await openScore()
+            : await importMusicXML();
       if (!file) return;
       setScore({
         src: file.src,
-        savedSrc: action === "open" ? file.src : "",
-        path: action === "open" ? file.path : null,
+        savedSrc: opening ? file.src : "",
+        path: opening ? file.path : null,
         includeDir: parentDirectory(file.path),
       });
       setLogs(null);
@@ -263,6 +274,43 @@ export default function App() {
     if (dirty) setPendingAction(action);
     else void execute(action);
   }
+
+  useEffect(
+    () =>
+      watchOpenRequests(
+        (paths) => setOpenPaths((previous) => [...previous, ...paths]),
+        (cause) =>
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : typeof cause === "string"
+                ? cause
+                : JSON.stringify(cause),
+          ),
+      ),
+    [],
+  );
+  const handleOpenedFile = useEffectEvent((file: ScoreFile) =>
+    request({ file }),
+  );
+  useEffect(() => {
+    if (busy || pendingAction || !openPaths.length) return;
+    let active = true;
+    void openScorePath(openPaths[0])
+      .then((file) => {
+        if (!active) return;
+        setOpenPaths((previous) => previous.slice(1));
+        handleOpenedFile(file);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setOpenPaths((previous) => previous.slice(1));
+        setError(String(cause));
+      });
+    return () => {
+      active = false;
+    };
+  }, [openPaths, busy, pendingAction]);
 
   async function exportFile(format: "pdf" | "midi" | "ly") {
     if (busy) return;
@@ -353,6 +401,7 @@ export default function App() {
         onSave={() => void save()}
         onSaveAs={() => void save(true)}
         onShowAbout={() => setAbout(true)}
+        onShowFileAssociations={() => setAssociations(true)}
         onExportLy={() => void exportFile("ly")}
         onExportPDF={() => void exportFile("pdf")}
         onExportMIDI={() => void exportFile("midi")}
@@ -376,7 +425,7 @@ export default function App() {
           Working…
         </div>
       )}
-      <div className="content">
+      <EditorPreviewLayout mode={mode} windowWidth={windowWidth}>
         <Editor
           ref={editor}
           code={score.src}
@@ -403,7 +452,8 @@ export default function App() {
         ) : (
           mode !== "edit" && (
             <div
-              className={`absolute inset-y-0 right-0 flex items-center justify-center p-8 ${mode === MODE_BOTH ? "left-1/2" : "left-0"}`}
+              className="absolute inset-y-0 right-0 flex items-center justify-center p-8"
+              style={{ left: mode === MODE_BOTH ? "var(--editor-width)" : 0 }}
             >
               <div role="status" className="text-center max-w-lg space-y-3">
                 {engine.error ? (
@@ -452,8 +502,11 @@ export default function App() {
             </div>
           )
         )}
-      </div>
+      </EditorPreviewLayout>
       {about && <ModalAbout onHide={() => setAbout(false)} />}
+      {associations && (
+        <ModalFileAssociations onHide={() => setAssociations(false)} />
+      )}
       {pendingAction && (
         <ModalUnsavedChangesInterstitial
           cancel={() => setPendingAction(null)}

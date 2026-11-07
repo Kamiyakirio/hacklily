@@ -1,4 +1,5 @@
 import { Channel, invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import type { RenderResult, SvgRenderer } from "./SvgRenderer";
@@ -81,6 +82,42 @@ export default class NativeRenderer implements SvgRenderer {
 }
 
 export const openScore = () => invoke<ScoreFile | null>("open_score");
+export const openScorePath = (path: string) =>
+  invoke<ScoreFile>("open_score_path", { path });
+
+export function watchOpenRequests(
+  onPaths: (paths: string[]) => void,
+  onError: (error: unknown) => void,
+) {
+  if (!isTauri()) return () => {};
+  let disposed = false;
+  let unlisten: (() => void) | undefined;
+  const collect = () => {
+    void invoke<string[]>("take_open_requests")
+      .then((paths) => {
+        if (!disposed && paths.length) onPaths(paths);
+      })
+      .catch((error) => {
+        if (!disposed) onError(error);
+      });
+  };
+  void listen("score-open-requested", collect)
+    .then((stop) => {
+      if (disposed) {
+        stop();
+        return;
+      }
+      unlisten = stop;
+      collect();
+    })
+    .catch((error) => {
+      if (!disposed) onError(error);
+    });
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
+}
 export const importMusicXML = () => invoke<ScoreFile | null>("import_musicxml");
 export const saveScore = (src: string, path: string | null) =>
   invoke<string | null>("save_score", { src, path });

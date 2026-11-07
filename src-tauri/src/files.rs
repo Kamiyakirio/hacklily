@@ -2,17 +2,83 @@ use crate::{engine::EngineManager, render};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::VecDeque,
     io::Write,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::{process::Command, sync::watch};
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ScoreFile {
     pub path: String,
     pub src: String,
+}
+
+#[derive(Default)]
+pub struct OpenRequests(Mutex<VecDeque<String>>);
+
+impl OpenRequests {
+    pub fn enqueue(&self, args: impl Iterator<Item = String>, cwd: &Path) {
+        let mut queue = self.0.lock().unwrap();
+        for argument in args.skip(1) {
+            let path = PathBuf::from(argument);
+            if !path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("ly"))
+            {
+                continue;
+            }
+            let path = if path.is_absolute() {
+                path
+            } else {
+                cwd.join(path)
+            };
+            queue.push_back(path.to_string_lossy().into_owned());
+        }
+    }
+}
+
+pub fn handle_launch(app: &AppHandle, args: Vec<String>, cwd: String) {
+    app.state::<OpenRequests>()
+        .enqueue(args.into_iter(), Path::new(&cwd));
+    let _ = app.emit("score-open-requested", ());
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
+pub fn take_open_requests(requests: State<'_, OpenRequests>) -> Vec<String> {
+    requests.0.lock().unwrap().drain(..).collect()
+}
+
+fn read_score(path: &Path) -> Result<ScoreFile, String> {
+    if !path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("ly"))
+    {
+        return Err("Choose a LilyPond (.ly) score".into());
+    }
+    if std::fs::metadata(path).map_err(|e| e.to_string())?.len() > 8 * 1024 * 1024 {
+        return Err("The score exceeds 8 MiB".into());
+    }
+    let src = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    Ok(ScoreFile {
+        path: path.to_string_lossy().into_owned(),
+        src,
+    })
+}
+
+#[tauri::command]
+pub async fn open_score_path(path: String) -> Result<ScoreFile, String> {
+    tauri::async_runtime::spawn_blocking(move || read_score(Path::new(&path)))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -27,14 +93,7 @@ pub async fn open_score(app: AppHandle) -> Result<Option<ScoreFile>, String> {
             return Ok(None);
         };
         let path = file.into_path().map_err(|e| e.to_string())?;
-        if std::fs::metadata(&path).map_err(|e| e.to_string())?.len() > 8 * 1024 * 1024 {
-            return Err("The score exceeds 8 MiB".into());
-        }
-        let src = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        Ok(Some(ScoreFile {
-            path: path.to_string_lossy().into_owned(),
-            src,
-        }))
+        read_score(&path).map(Some)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -165,6 +224,45 @@ async fn convert_musicxml(root: &Path, path: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn queues_launch_files_with_spaces_unicode_and_relative_paths() {
+        let requests = OpenRequests::default();
+        requests.enqueue(
+            [
+                "hacklily.exe",
+                "乐谱 one.LY",
+                "--ignored",
+                "song.pdf",
+                "second.ly",
+            ]
+            .into_iter()
+            .map(String::from),
+            Path::new("scores"),
+        );
+        let paths: Vec<_> = requests.0.lock().unwrap().drain(..).collect();
+        assert_eq!(
+            paths,
+            [
+                Path::new("scores").join("乐谱 one.LY").to_string_lossy(),
+                Path::new("scores").join("second.ly").to_string_lossy()
+            ]
+        );
+    }
+
+    #[test]
+    fn reads_associated_scores_and_rejects_other_files_or_large_scores() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("乐谱 one.LY");
+        std::fs::write(&path, "c4 d e f").unwrap();
+        assert_eq!(read_score(&path).unwrap().src, "c4 d e f");
+        assert!(read_score(&temp.path().join("missing.ly")).is_err());
+        assert!(read_score(&temp.path().join("song.pdf")).is_err());
+        std::fs::File::create(&path)
+            .unwrap()
+            .set_len(8 * 1024 * 1024 + 1)
+            .unwrap();
+        assert!(read_score(&path).unwrap_err().contains("8 MiB"));
+    }
     #[test]
     fn replaces_the_selected_file_atomically() {
         let temp = tempfile::tempdir().unwrap();

@@ -586,10 +586,7 @@ export default function Preview(props: Props) {
 
   const { mode, logs } = props;
   const pendingPreviews = pending ? 1 : 0;
-  const previewMaskStyle: string = cn(
-    APP_STYLE.pendingPreviewMask,
-    mode === MODE_VIEW && APP_STYLE.previewPendingMaskModeView,
-  );
+  const previewLeft = mode === MODE_BOTH ? "var(--editor-width, 50%)" : 0;
 
   // WARNING: The iframe is NOT sandboxed so we can write to the iframe and so
   // that we can add a click event (see onSelectionChanged).
@@ -605,7 +602,14 @@ export default function Preview(props: Props) {
         className={cn(APP_STYLE.sheetMusicView)}
         height="100%"
         ref={frameRef}
-        width={mode === MODE_BOTH ? "50%" : mode === MODE_VIEW ? "100%" : "0"}
+        style={{
+          width:
+            mode === MODE_BOTH
+              ? "calc(100% - var(--editor-width, 50%))"
+              : mode === MODE_VIEW
+                ? "100%"
+                : 0,
+        }}
       />
       {mode !== "edit" && (
         <ButtonGroup
@@ -648,12 +652,21 @@ export default function Preview(props: Props) {
           </Button>
         </ButtonGroup>
       )}
-      {pendingPreviews > 0 && <div className={previewMaskStyle} />}
+      {pendingPreviews > 0 && mode !== "edit" && (
+        <div
+          className={APP_STYLE.pendingPreviewMask}
+          style={{ left: previewLeft }}
+        />
+      )}
       {error && (
         <div
           className={cn(
-            "bg-black text-white absolute inset-y-0 left-[50%] p-4 text-center w-[50%]",
+            "bg-black text-white absolute inset-y-0 right-0 p-4 text-center",
           )}
+          style={{
+            left: previewLeft,
+            display: mode === "edit" ? "none" : undefined,
+          }}
         >
           {error}
         </div>
