@@ -29,6 +29,27 @@ function result(label: string): RenderResult {
   };
 }
 
+function pointer(
+  type: string,
+  x: number,
+  y: number,
+  options: { button?: number; buttons?: number; pointerType?: string } = {},
+) {
+  const event = new MouseEvent(type, {
+    clientX: x,
+    clientY: y,
+    button: options.button ?? 0,
+    buttons: options.buttons ?? 1,
+    bubbles: true,
+    cancelable: true,
+  });
+  Object.defineProperties(event, {
+    pointerId: { value: 1 },
+    pointerType: { value: options.pointerType ?? "mouse" },
+  });
+  return event;
+}
+
 describe("preview rendering lifetime", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
@@ -63,13 +84,17 @@ describe("preview rendering lifetime", () => {
     vi.unstubAllGlobals();
   });
 
-  async function show(code: string, logsCallback = onLogsObtained) {
+  async function show(
+    code: string,
+    logsCallback = onLogsObtained,
+    mode: ComponentProps<typeof Preview>["mode"] = "both",
+  ) {
     await act(async () =>
       root.render(
         <Preview
           code={code}
           logs=""
-          mode="both"
+          mode={mode}
           renderer={renderer}
           onLogsObtained={logsCallback}
           onMidiObtained={vi.fn()}
@@ -142,6 +167,16 @@ describe("preview rendering lifetime", () => {
       }),
     );
     const frame = container.querySelector("iframe");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')
+        .click(),
+    );
+    expect(
+      frame.contentDocument
+        .getElementById("root")
+        .style.getPropertyValue("--preview-scale"),
+    ).toBe("1.25");
     const link = frame.contentDocument.querySelector("path");
     await act(async () =>
       link.dispatchEvent(
@@ -154,5 +189,204 @@ describe("preview rendering lifetime", () => {
         selectionStartLineNumber: 1,
       }),
     );
+  });
+
+  it("keeps zoom across new pages and view modes without recompiling on zoom", async () => {
+    await show("first");
+    await act(async () => vi.advanceTimersByTime(1000));
+    await act(async () => renders[0].resolve(result("first")));
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')
+        .click(),
+    );
+    expect(renderer.renderSvg).toHaveBeenCalledTimes(1);
+    const reset = () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Reset zoom"]');
+    expect(reset().textContent).toBe("125%");
+    await show("next");
+    await act(async () => vi.advanceTimersByTime(1000));
+    await act(async () =>
+      renders[1].resolve({
+        files: ['<svg viewBox="0 0 100 200"/>', '<svg viewBox="0 0 200 100"/>'],
+        logs: "next",
+      }),
+    );
+    const scoreRoot = container
+      .querySelector("iframe")
+      .contentDocument.getElementById("root");
+    expect(scoreRoot.querySelectorAll("svg")).toHaveLength(2);
+    expect(scoreRoot.style.getPropertyValue("--preview-scale")).toBe("1.25");
+    await show("next", onLogsObtained, "edit");
+    expect(reset()).toBeNull();
+    await show("next", onLogsObtained, "view");
+    expect(reset().textContent).toBe("125%");
+    await act(async () => reset().click());
+    expect(scoreRoot.style.getPropertyValue("--preview-scale")).toBe("1");
+    expect(renderer.renderSvg).toHaveBeenCalledTimes(2);
+  });
+
+  it("only intercepts modified wheel events, clamps zoom, and releases its listener", async () => {
+    await show("score");
+    const doc = container.querySelector("iframe").contentDocument;
+    const plain = new WheelEvent("wheel", {
+      deltaY: -100,
+      bubbles: true,
+      cancelable: true,
+    });
+    doc.dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(false);
+    await act(async () =>
+      doc.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaY: -1,
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    expect(
+      Number(
+        doc.getElementById("root").style.getPropertyValue("--preview-scale"),
+      ),
+    ).toBeGreaterThan(1);
+    const zoomIn = new WheelEvent("wheel", {
+      deltaY: -100000,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => doc.dispatchEvent(zoomIn));
+    expect(zoomIn.defaultPrevented).toBe(true);
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')
+        .disabled,
+    ).toBe(true);
+    expect(
+      container.querySelector('[aria-label="Reset zoom"]').textContent,
+    ).toBe("400%");
+    await act(async () =>
+      doc.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaY: 100000,
+          metaKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    );
+    expect(
+      container.querySelector<HTMLButtonElement>('[aria-label="Zoom out"]')
+        .disabled,
+    ).toBe(true);
+    expect(
+      container.querySelector('[aria-label="Reset zoom"]').textContent,
+    ).toBe("25%");
+    await act(async () => root.render(null));
+    const afterUnmount = new WheelEvent("wheel", {
+      deltaY: 100,
+      ctrlKey: true,
+      cancelable: true,
+    });
+    doc.dispatchEvent(afterUnmount);
+    expect(afterUnmount.defaultPrevented).toBe(false);
+  });
+
+  it("pans from a note without activating it, but preserves clicks with a small pointer movement", async () => {
+    await show("score");
+    await act(async () => vi.advanceTimersByTime(1000));
+    await act(async () =>
+      renders[0].resolve({
+        files: [
+          '<svg><a href="textedit:///tmp/hacklily.ly:1:0:2"><path d="M0 0"/></a></svg>',
+        ],
+        logs: "",
+      }),
+    );
+    const doc = container.querySelector("iframe").contentDocument;
+    const scroll = doc.scrollingElement || doc.documentElement;
+    const note = doc.querySelector("path");
+    scroll.scrollLeft = 100;
+    scroll.scrollTop = 150;
+    note.dispatchEvent(pointer("pointerdown", 200, 200));
+    doc.dispatchEvent(pointer("pointermove", 120, 140));
+    expect(scroll.scrollLeft).toBe(180);
+    expect(scroll.scrollTop).toBe(210);
+    expect(doc.documentElement.classList.contains("isPanning")).toBe(true);
+    doc.dispatchEvent(pointer("pointerup", 120, 140, { buttons: 0 }));
+    await act(async () =>
+      note.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      ),
+    );
+    expect(onSelectionChanged).not.toHaveBeenCalled();
+    expect(doc.documentElement.classList.contains("isPanning")).toBe(false);
+    note.dispatchEvent(pointer("pointerdown", 120, 140));
+    doc.dispatchEvent(pointer("pointermove", 122, 141));
+    doc.dispatchEvent(pointer("pointerup", 122, 141, { buttons: 0 }));
+    await act(async () =>
+      note.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      ),
+    );
+    expect(onSelectionChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ positionLineNumber: 1 }),
+    );
+    expect(scroll.scrollLeft).toBe(180);
+    expect(scroll.scrollTop).toBe(210);
+  });
+
+  it("ends dragging on cancellation and blur, and releases handlers on unmount", async () => {
+    await show("score");
+    const doc = container.querySelector("iframe").contentDocument;
+    const scroll = doc.scrollingElement || doc.documentElement;
+    doc.body.dispatchEvent(pointer("pointerdown", 100, 100));
+    doc.dispatchEvent(pointer("pointermove", 50, 50));
+    doc.dispatchEvent(pointer("pointercancel", 50, 50, { buttons: 0 }));
+    expect(doc.documentElement.classList.contains("isPanning")).toBe(false);
+    const afterCancel = scroll.scrollTop;
+    doc.dispatchEvent(pointer("pointermove", 0, 0));
+    expect(scroll.scrollTop).toBe(afterCancel);
+    doc.body.dispatchEvent(pointer("pointerdown", 100, 100));
+    doc.dispatchEvent(pointer("pointermove", 50, 50));
+    doc.defaultView.dispatchEvent(new Event("blur"));
+    expect(doc.documentElement.classList.contains("isPanning")).toBe(false);
+    doc.body.dispatchEvent(pointer("pointerdown", 100, 100));
+    doc.dispatchEvent(pointer("pointermove", 50, 50));
+    await act(async () => root.render(null));
+    expect(doc.documentElement.classList.contains("isPanning")).toBe(false);
+    const afterUnmount = scroll.scrollTop;
+    doc.body.dispatchEvent(pointer("pointerdown", 100, 100));
+    doc.dispatchEvent(pointer("pointermove", 0, 0));
+    expect(scroll.scrollTop).toBe(afterUnmount);
+  });
+
+  it("preserves native touch scrolling and the context menu, and supports the middle button", async () => {
+    await show("score");
+    const doc = container.querySelector("iframe").contentDocument;
+    const scroll = doc.scrollingElement || doc.documentElement;
+    const touch = pointer("pointerdown", 100, 100, { pointerType: "touch" });
+    doc.body.dispatchEvent(touch);
+    doc.dispatchEvent(pointer("pointermove", 0, 0, { pointerType: "touch" }));
+    expect(touch.defaultPrevented).toBe(false);
+    expect(scroll.scrollTop).toBe(0);
+    const secondary = pointer("pointerdown", 100, 100, {
+      button: 2,
+      buttons: 2,
+    });
+    doc.body.dispatchEvent(secondary);
+    doc.dispatchEvent(pointer("pointermove", 0, 0, { button: 2, buttons: 2 }));
+    expect(secondary.defaultPrevented).toBe(false);
+    expect(scroll.scrollTop).toBe(0);
+    const middle = pointer("pointerdown", 100, 100, { button: 1, buttons: 4 });
+    doc.body.dispatchEvent(middle);
+    doc.dispatchEvent(
+      pointer("pointermove", 50, 50, { button: 1, buttons: 4 }),
+    );
+    expect(middle.defaultPrevented).toBe(true);
+    expect(scroll.scrollTop).toBe(50);
+    doc.dispatchEvent(pointer("pointerup", 50, 50, { button: 1, buttons: 0 }));
+    expect(doc.documentElement.classList.contains("isPanning")).toBe(false);
   });
 });

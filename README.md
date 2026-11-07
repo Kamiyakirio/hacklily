@@ -39,6 +39,8 @@ The official packages configured here support Windows x86_64, Linux x86_64, and 
 
 ## Files and export
 
+- Preview zoom supports 25%–400% with the toolbar or Ctrl/Cmd + mouse wheel over the score. Click the percentage to reset to 100%; the zoom level is kept when the preview updates.
+- Drag the preview with the left or middle mouse button to pan horizontally or vertically. A click on a note still jumps to its source; dragging does not activate note links.
 - Open and save `.ly` files using native file dialogs. Save as creates a copy.
 - `Ctrl/Cmd+S` saves, `Ctrl/Cmd+Shift+S` saves as, `Ctrl/Cmd+O` opens, and `Ctrl/Cmd+N` creates a score.
 - Import MusicXML using the `musicxml2ly` included in the downloaded distribution.

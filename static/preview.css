@@ -3,19 +3,34 @@
  * Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
  */
 
+html {
+  cursor: grab;
+  user-select: none;
+}
+
+html.isPanning,
+html.isPanning * {
+  cursor: grabbing !important;
+}
+
+svg a {
+  cursor: grab;
+}
+
 body {
   margin: 0;
   padding: 0;
+  background-color: white;
 }
 
 #root {
-  background-color: #1e1e1e;
+  background-color: white;
+  --preview-scale: 1;
 }
 
 body.modeView {
   overflow-x: auto;
-  overflow-y: hidden;
-  background-color: #1e1e1e;
+  overflow-y: auto;
 }
 
 body.modeView #root {
@@ -25,6 +40,7 @@ body.modeView #root {
 
 svg {
   background-color: white;
+  vertical-align: top;
 }
 
 body.modeView svg + svg {
@@ -32,13 +48,19 @@ body.modeView svg + svg {
 }
 
 body.modeView svg {
-  max-height: 100%;
-  max-width: 100vmin;
+  width: calc(
+    min(100vw, calc(100vh * var(--page-aspect, 0.7071))) * var(--preview-scale)
+  );
+  height: auto;
+  max-width: none;
   white-space: normal;
 }
 
 body.modeBoth svg {
-  width: 100%;
+  display: block;
+  width: calc(100% * var(--preview-scale));
+  height: auto;
+  margin-inline: auto;
 }
 
 body.modeBoth svg + svg {
@@ -55,6 +77,12 @@ body.modeBoth svg + svg {
 svg use,
 svg path {
   pointer-events: none;
+}
+
+/* Native LilyPond SVG wraps glyphs in links instead of using Cairo overlays. */
+svg a use,
+svg a path {
+  pointer-events: visiblePainted;
 }
 
 @font-face {

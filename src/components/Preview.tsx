@@ -2,8 +2,15 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import DOMPurify from "dompurify";
+import { ZoomIn, ZoomOut } from "lucide-react";
 import type * as monacoEditor from "monaco-editor";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { track } from "#/lib/analytics";
 import { decodeArrayBuffer } from "#/lib/base64Binary";
@@ -15,6 +22,8 @@ import type { ViewMode } from "./Header";
 import { MODE_BOTH, MODE_VIEW } from "./Header";
 import Logs from "./Logs";
 import { APP_STYLE } from "./styles";
+import { Button } from "./ui/button";
+import { ButtonGroup } from "./ui/button-group";
 
 // ─────────────────────────────────────────────────────────────
 // DOMPurify hooks
@@ -123,7 +132,14 @@ export function sanitizeSvg(dirty: string, idPrefix: string): string {
 /**
  * How long the code must not be edited for a preview to render.
  */
-const DEBOUNCE_REFERSH_TIMEOUT = 1000;
+const DEBOUNCE_REFERSH_TIMEOUT = 500;
+const MIN_ZOOM = 25;
+const MAX_ZOOM = 400;
+const ZOOM_STEP = 25;
+
+function clampZoom(value: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
 
 /**
  * HTML with a #root element under which the svgs will be inserted.
@@ -200,8 +216,7 @@ function cleanLogs(logs: string): string {
 /**
  * Renders an SVG preview of the song in an iframe.
  *
- * The SVG is retrieved from the backend server (or, on /wasm, a local wasm
- * worker) via the SvgRenderer.
+ * The SVG is retrieved from the local LilyPond engine via the SvgRenderer.
  *
  * On update, it sends back the logs to the parent so that it can be used to highlight
  * errors in the editor. See onLogsObtained.
@@ -212,6 +227,7 @@ function cleanLogs(logs: string): string {
 export default function Preview(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [zoom, setZoom] = useState(100);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [frameDocument, setFrameDocument] = useState<Document | null>(null);
   const previousMIDIData = useRef<string | null>(null);
@@ -304,6 +320,17 @@ export default function Preview(props: Props) {
         root.getElementsByTagName("svg"),
       );
       for (const svg of svgs) {
+        const viewBox = svg
+          .getAttribute("viewBox")
+          ?.trim()
+          .split(/[\s,]+/)
+          .map(Number);
+        if (viewBox?.length === 4 && viewBox[2] > 0 && viewBox[3] > 0) {
+          svg.style.setProperty(
+            "--page-aspect",
+            String(viewBox[2] / viewBox[3]),
+          );
+        }
         svg.removeAttribute("width");
         svg.removeAttribute("height");
       }
@@ -330,11 +357,122 @@ export default function Preview(props: Props) {
     },
   );
 
+  useLayoutEffect(() => {
+    frameDocument
+      ?.getElementById("root")
+      ?.style.setProperty("--preview-scale", String(zoom / 100));
+  }, [frameDocument, zoom]);
+
+  useEffect(() => {
+    if (!frameDocument) return;
+    const wheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.deltaY === 0) return;
+      event.preventDefault();
+      const delta =
+        event.deltaY *
+        (event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? frameDocument.defaultView?.innerHeight ||
+              frameDocument.documentElement.clientHeight
+            : 1);
+      setZoom((previous) => clampZoom(previous * Math.exp(-delta * 0.002)));
+    };
+    frameDocument.addEventListener("wheel", wheel, { passive: false });
+    return () => frameDocument.removeEventListener("wheel", wheel);
+  }, [frameDocument]);
+
   useEffect(() => {
     const body = frameDocument?.body;
     if (!body) return;
+    const documentElement = frameDocument.documentElement;
+    let drag: {
+      pointerId: number;
+      x: number;
+      y: number;
+      left: number;
+      top: number;
+      button: number;
+      target: Element;
+      moved: boolean;
+    } | null = null;
+    let suppressClick = false;
+    let clickReset: ReturnType<typeof setTimeout> | undefined;
+
+    const finishDrag = (event?: PointerEvent) => {
+      if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+      const current = drag;
+      drag = null;
+      documentElement.classList.remove("isPanning");
+      try {
+        if (current.target.hasPointerCapture?.(current.pointerId)) {
+          current.target.releasePointerCapture(current.pointerId);
+        }
+      } catch {
+        /* The SVG can be replaced while a pointer is captured. */
+      }
+      if (current.moved) {
+        suppressClick = true;
+        clearTimeout(clickReset);
+        clickReset = setTimeout(() => {
+          suppressClick = false;
+        }, 0);
+      }
+    };
+    const pointerDown = (event: PointerEvent) => {
+      if (
+        drag ||
+        event.pointerType === "touch" ||
+        (event.button !== 0 && event.button !== 1)
+      )
+        return;
+      const scroll = frameDocument.scrollingElement || documentElement;
+      const target = event.target as Element;
+      clearTimeout(clickReset);
+      suppressClick = false;
+      drag = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        left: scroll.scrollLeft,
+        top: scroll.scrollTop,
+        button: event.button === 0 ? 1 : 4,
+        target,
+        moved: false,
+      };
+      try {
+        target.setPointerCapture?.(event.pointerId);
+      } catch {
+        /* Synthetic pointers and detached SVG targets cannot capture. */
+      }
+      if (event.button === 1) event.preventDefault();
+    };
+    const pointerMove = (event: PointerEvent) => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      if (!(event.buttons & drag.button)) {
+        finishDrag(event);
+        return;
+      }
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      drag.moved = true;
+      suppressClick = true;
+      documentElement.classList.add("isPanning");
+      event.preventDefault();
+      const scroll = frameDocument.scrollingElement || documentElement;
+      scroll.scrollLeft = drag.left - dx;
+      scroll.scrollTop = drag.top - dy;
+    };
+    const preventNativeDrag = (event: DragEvent) => event.preventDefault();
+    const blur = () => finishDrag();
     const click = (ev: MouseEvent) => {
       ev.preventDefault();
+      if (suppressClick) {
+        suppressClick = false;
+        ev.stopPropagation();
+        return;
+      }
       let target: HTMLElement | null = ev.target as HTMLElement | null;
       while (target && target.localName !== "a") {
         target = target.parentElement;
@@ -358,7 +496,27 @@ export default function Preview(props: Props) {
       }
     };
     body.addEventListener("click", click);
-    return () => body.removeEventListener("click", click);
+    frameDocument.addEventListener("pointerdown", pointerDown);
+    frameDocument.addEventListener("pointermove", pointerMove, {
+      passive: false,
+    });
+    frameDocument.addEventListener("pointerup", finishDrag);
+    frameDocument.addEventListener("pointercancel", finishDrag);
+    frameDocument.addEventListener("lostpointercapture", finishDrag);
+    frameDocument.addEventListener("dragstart", preventNativeDrag);
+    frameDocument.defaultView?.addEventListener("blur", blur);
+    return () => {
+      finishDrag();
+      clearTimeout(clickReset);
+      body.removeEventListener("click", click);
+      frameDocument.removeEventListener("pointerdown", pointerDown);
+      frameDocument.removeEventListener("pointermove", pointerMove);
+      frameDocument.removeEventListener("pointerup", finishDrag);
+      frameDocument.removeEventListener("pointercancel", finishDrag);
+      frameDocument.removeEventListener("lostpointercapture", finishDrag);
+      frameDocument.removeEventListener("dragstart", preventNativeDrag);
+      frameDocument.defaultView?.removeEventListener("blur", blur);
+    };
   }, [frameDocument]);
 
   useEffect(() => {
@@ -439,6 +597,7 @@ export default function Preview(props: Props) {
   return (
     <div className="bg-background border-l border-black">
       <iframe
+        title="Score preview"
         srcDoc={BODY_IFRAME_TEMPLATE}
         onLoad={(event) =>
           setFrameDocument(event.currentTarget.contentDocument)
@@ -448,6 +607,47 @@ export default function Preview(props: Props) {
         ref={frameRef}
         width={mode === MODE_BOTH ? "50%" : mode === MODE_VIEW ? "100%" : "0"}
       />
+      {mode !== "edit" && (
+        <ButtonGroup
+          aria-label="Preview zoom"
+          className="absolute right-3 top-3 z-10 rounded-lg bg-background shadow-md"
+          title="Ctrl/⌘ + mouse wheel to zoom"
+        >
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Zoom out"
+            title="Zoom out"
+            disabled={zoom <= MIN_ZOOM}
+            onClick={() =>
+              setZoom((previous) => clampZoom(previous - ZOOM_STEP))
+            }
+          >
+            <ZoomOut />
+          </Button>
+          <Button
+            variant="outline"
+            className="min-w-16 tabular-nums"
+            aria-label="Reset zoom"
+            title="Reset to 100%"
+            onClick={() => setZoom(100)}
+          >
+            {Math.round(zoom)}%
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Zoom in"
+            title="Zoom in"
+            disabled={zoom >= MAX_ZOOM}
+            onClick={() =>
+              setZoom((previous) => clampZoom(previous + ZOOM_STEP))
+            }
+          >
+            <ZoomIn />
+          </Button>
+        </ButtonGroup>
+      )}
       {pendingPreviews > 0 && <div className={previewMaskStyle} />}
       {error && (
         <div
