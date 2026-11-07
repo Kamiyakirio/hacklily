@@ -7,6 +7,7 @@ import type { RenderResult, SvgRenderer } from "#/lib/SvgRenderer";
 import Preview from "./Preview";
 
 type LogsCallback = ComponentProps<typeof Preview>["onLogsObtained"];
+type SelectionCallback = ComponentProps<typeof Preview>["onSelectionChanged"];
 
 vi.mock("./Logs", () => ({ default: () => null }));
 vi.mock("#/lib/analytics", () => ({ track: vi.fn() }));
@@ -34,6 +35,7 @@ describe("preview rendering lifetime", () => {
   let renders: ReturnType<typeof deferred<RenderResult>>[];
   let renderer: SvgRenderer;
   let onLogsObtained: ReturnType<typeof vi.fn<LogsCallback>>;
+  let onSelectionChanged: ReturnType<typeof vi.fn<SelectionCallback>>;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -51,6 +53,7 @@ describe("preview rendering lifetime", () => {
       }),
     };
     onLogsObtained = vi.fn<LogsCallback>();
+    onSelectionChanged = vi.fn<SelectionCallback>();
   });
 
   afterEach(async () => {
@@ -70,7 +73,7 @@ describe("preview rendering lifetime", () => {
           renderer={renderer}
           onLogsObtained={logsCallback}
           onMidiObtained={vi.fn()}
-          onSelectionChanged={vi.fn()}
+          onSelectionChanged={onSelectionChanged}
         />,
       ),
     );
@@ -124,5 +127,32 @@ describe("preview rendering lifetime", () => {
     await act(async () => vi.advanceTimersByTime(10000));
     expect(onLogsObtained).not.toHaveBeenCalled();
     expect(renderer.renderSvg).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps native source links without subtracting the old server's extra line", async () => {
+    await show("score");
+    await act(async () => vi.advanceTimersByTime(1000));
+    await act(async () =>
+      renders[0].resolve({
+        files: [
+          '<svg xmlns="http://www.w3.org/2000/svg"><a href="textedit:///tmp/hacklily.ly:1:0:2"><path d="M0 0" /></a></svg>',
+        ],
+        logs: "",
+        midi: null,
+      }),
+    );
+    const frame = container.querySelector("iframe");
+    const link = frame.contentDocument.querySelector("path");
+    await act(async () =>
+      link.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      ),
+    );
+    expect(onSelectionChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        positionLineNumber: 1,
+        selectionStartLineNumber: 1,
+      }),
+    );
   });
 });

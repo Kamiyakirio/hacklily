@@ -158,9 +158,7 @@ interface Props {
   mode: ViewMode;
 
   /**
-   * Renderer used to engrave the source to SVG. Backed by the server over
-   * the WebSocket today; a wasm worker renderer is planned for the /wasm
-   * route.
+   * Renderer used to engrave the source to SVG with the local desktop engine.
    */
   renderer: SvgRenderer;
 
@@ -342,19 +340,19 @@ export default function Preview(props: Props) {
         target = target.parentElement;
       }
       if (target && target.localName === "a") {
-        const link: string | null = target.getAttribute("xlink:href");
-        if (!link) {
+        const link: string | null =
+          target.getAttribute("xlink:href") || target.getAttribute("href");
+        if (!link?.startsWith("textedit:")) {
           return;
         }
         const pathAndLocation: string[] = link.split(".ly:");
         if (pathAndLocation.length === 2) {
           const [line, startColumn, endColumn] = pathAndLocation[1].split(":");
           selectionChanged({
-            // NOTE: we add a line on render:
             positionColumn: parseInt(endColumn, 10) + 1,
-            positionLineNumber: parseInt(line, 10) - 1,
+            positionLineNumber: parseInt(line, 10),
             selectionStartColumn: parseInt(startColumn, 10) + 1,
-            selectionStartLineNumber: parseInt(line, 10) - 1,
+            selectionStartLineNumber: parseInt(line, 10),
           });
         }
       }
@@ -411,6 +409,7 @@ export default function Preview(props: Props) {
     function request(code: string) {
       latestCode = code;
       queued = true;
+      if (running) renderer.cancel?.();
       clearTimeout(timer);
       timer = setTimeout(() => void run(), DEBOUNCE_REFERSH_TIMEOUT);
     }
@@ -418,6 +417,7 @@ export default function Preview(props: Props) {
     return () => {
       active = false;
       clearTimeout(timer);
+      renderer.cancel?.();
       schedule.current = null;
     };
   }, [props.renderer]);

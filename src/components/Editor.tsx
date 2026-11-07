@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import { Lock, TriangleAlert } from "lucide-react";
 import * as monacoEditor from "monaco-editor";
 import type { Ref } from "react";
 import {
@@ -51,10 +50,6 @@ interface Props {
    */
   defaultSelection: monacoEditor.ISelection | null;
 
-  hideUnstableNotification: boolean;
-
-  isImmutableSrc: boolean;
-
   /**
    * Lilypond logs -- used to render errors
    */
@@ -65,16 +60,11 @@ interface Props {
    */
   mode: ViewMode;
 
-  readOnly: boolean;
-
-  rendererVersion: "stable" | "unstable";
-  variant: "wasm" | "server";
-
   /**
    * Called when an edit occurs. <Editor /> is a controlled component.
    */
   onSetCode(newCode: string): void;
-  onHideUnstableNotification(): void;
+
   showMakelily(tool?: string, cb?: (ly: string) => void): void;
 }
 
@@ -262,9 +252,8 @@ export default function Editor({ ref, ...props }: Props) {
     const logs = props.logs;
 
     const errors: monacoEditor.editor.IModelDeltaDecoration[] = [];
-    const matchErrors = /hacklily.ly:([0-9]*):(([0-9]*):([0-9]*))?\s*([ew].*)/g;
+    const matchErrors = /hacklily\.ly:(\d+):(\d+):\s*(.*)/g;
     if (logs) {
-      const isServer = props.variant === "server";
       for (
         let error: RegExpExecArray | null = matchErrors.exec(logs);
         error;
@@ -274,20 +263,16 @@ export default function Editor({ ref, ...props }: Props) {
           options: {
             hoverMessage: {
               isTrusted: false,
-              value: error[5],
+              value: error[3],
             },
             inlineClassName: "lilymonaco-inline-error",
             linesDecorationsClassName: cn(APP_STYLE.errorDecoration),
           },
           range: {
-            // we insert a line on the server:
-            endColumn: parseInt(
-              error[4] || String(parseInt(error[2], 10) + 1),
-              10,
-            ),
-            endLineNumber: parseInt(error[1], 10) - (isServer ? 1 : 0),
-            startColumn: parseInt(error[3], 10),
-            startLineNumber: parseInt(error[1], 10) - (isServer ? 1 : 0),
+            endColumn: Math.max(1, parseInt(error[2], 10)) + 1,
+            endLineNumber: parseInt(error[1], 10),
+            startColumn: Math.max(1, parseInt(error[2], 10)),
+            startLineNumber: parseInt(error[1], 10),
           },
         });
       }
@@ -295,67 +280,27 @@ export default function Editor({ ref, ...props }: Props) {
 
     const decorations = editorInstance.createDecorationsCollection(errors);
     return () => decorations.clear();
-  }, [editorInstance, props.logs, props.variant]);
+  }, [editorInstance, props.logs]);
 
-  const {
-    code,
-    mode,
-    onSetCode,
-    readOnly,
-    rendererVersion,
-    onHideUnstableNotification,
-    hideUnstableNotification,
-  } = props;
+  const { code, mode, onSetCode } = props;
   const monacoOptions: monacoEditor.editor.IEditorOptions = {
     autoClosingBrackets: "always",
     minimap: {
       enabled: false,
     },
-    readOnly,
+
     selectionHighlight: false,
   };
 
   const width = mode === MODE_EDIT ? "100%" : "50%";
 
-  const readOnlyNotice = readOnly ? (
-    <div className={cn(APP_STYLE.urgentEditorNotification)} style={{ width }}>
-      <Lock size="1em" className="inline" />{" "}
-      {props.isImmutableSrc ? (
-        <>to edit, save a copy of this song to your library.</>
-      ) : (
-        <>read-only &mdash; to edit, log in as the owner or save a copy</>
-      )}
-    </div>
-  ) : null;
-
-  const unstableVersionNotice =
-    rendererVersion === "unstable" && !hideUnstableNotification ? (
-      <div className={cn(APP_STYLE.urgentEditorNotification)} style={{ width }}>
-        <TriangleAlert size="1em" className="inline" /> This song uses LilyPond
-        2.27, which is an unstable development version and may change without
-        notice.{" "}
-        <button
-          type="button"
-          onClick={onHideUnstableNotification}
-          className={cn(APP_STYLE.urgentEditorNotificationClose)}
-        >
-          I understand.
-        </button>
-      </div>
-    ) : null;
-
   if (code === null || code === undefined) {
     return null;
   }
 
-  // NOTE: we have to key ReactMonacoEditor, because we need to force a reload
-  // when that changes.
   return (
     <div className={cn("monaco", mode === MODE_VIEW && APP_STYLE.monacoHidden)}>
-      {readOnlyNotice}
-      {unstableVersionNotice}
       <ReactMonacoEditor
-        key={readOnly ? "read-only" : "read-write"}
         editorDidMount={handleEditorDidMount}
         editorWillMount={handleEditorWillMount}
         editorWillUnmount={handleEditorWillUnmount}

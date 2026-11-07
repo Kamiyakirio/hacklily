@@ -31,7 +31,6 @@ import {
   TooltipTrigger,
 } from "#/components/ui/tooltip";
 import { track } from "#/lib/analytics";
-import type { Auth } from "#/lib/auth";
 import { mergeState } from "#/lib/state";
 import { cn } from "#/lib/utils";
 
@@ -60,33 +59,23 @@ interface Player {
 }
 
 interface Props {
-  auth: Auth | null;
   canExport: boolean;
-  inSandbox: boolean;
-  isDirty: boolean;
-  readOnly: boolean;
-  loggedIn: boolean;
+  canSave: boolean;
+  midiAvailable: boolean;
   midi: ArrayBuffer | null;
   mode: ViewMode;
-  online: boolean;
-  sandboxIsDirty: boolean;
-  song: string | undefined;
   windowWidth: number;
-  songURL: string | null;
   onModeChanged(mode: ViewMode): void;
-  onShowClone(): void;
   onShowMakelily(tool: string): void;
   onShowNew(): void;
   onShowOpen(): void;
   onExportLy(): any;
   onExportMIDI(): any;
   onExportPDF(): any;
-  onShowPublish(): void;
-  onDeleteSong(song: string): void;
-  onLoadSong(song: string): void;
+  onSave(): void;
+  onSaveAs(): void;
+  onImportMusicXML(): void;
   onShowAbout(): void;
-  onSignIn(): void;
-  onSignOut(): void;
 }
 
 interface State {
@@ -280,26 +269,20 @@ export default function Header(props: Props) {
   }
 
   const {
-    auth,
     canExport,
-    readOnly,
-    inSandbox,
+    canSave,
+    midiAvailable,
     mode,
     midi,
-    onDeleteSong,
     onExportLy,
     onExportMIDI,
     onExportPDF,
-    onLoadSong,
     onShowAbout,
-    onShowClone,
     onShowOpen,
     onShowNew,
-    onShowPublish,
-    onSignIn,
-    onSignOut,
-    online,
-    songURL,
+    onSave,
+    onSaveAs,
+    onImportMusicXML,
     windowWidth,
   } = props;
   const { played } = state;
@@ -372,24 +355,18 @@ export default function Header(props: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent className="min-w-48">
               <FileMenu
-                auth={auth}
-                canCreateNew={online}
-                canSave={online && !readOnly}
-                canSaveAs={online && !inSandbox}
+                canSave={canSave}
+                midiAvailable={midiAvailable}
                 canExport={canExport}
-                onDeleteSong={onDeleteSong}
                 onExportLy={onExportLy}
                 onExportMIDI={onExportMIDI}
                 onExportPDF={onExportPDF}
-                onLoadSong={onLoadSong}
                 onShowAbout={onShowAbout}
-                onShowClone={onShowClone}
                 onShowOpen={onShowOpen}
-                onShowPublish={onShowPublish}
+                onSave={onSave}
+                onSaveAs={onSaveAs}
+                onImportMusicXML={onImportMusicXML}
                 onShowNew={onShowNew}
-                onSignIn={onSignIn}
-                onSignOut={onSignOut}
-                songURL={songURL}
               />
             </DropdownMenuContent>
           </DropdownMenu>

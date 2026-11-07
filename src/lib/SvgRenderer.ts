@@ -13,8 +13,7 @@ export interface RenderResult {
   logs: string;
   midi?: string;
   /**
-   * Diagnostics counted by the renderer, when available (the wasm worker
-   * surfaces these; the server path leaves them undefined). Lets the caller
+   * Diagnostics counted by the renderer, when available. Lets the caller
    * tell a clean render from "success-with-warnings" / "success-with-errors"
    * without re-parsing the logs.
    */
@@ -23,17 +22,15 @@ export interface RenderResult {
 }
 
 /**
- * What a renderer can do. Today the only implementation is the server-backed
- * one (`RpcSvgRenderer`); a wasm/worker-backed renderer is planned for the
- * `/wasm` route, which engraves in-browser without a server round-trip.
+ * The preview rendering contract, implemented by the native desktop engine.
  */
 export interface SvgRenderer {
   /**
    * Engrave `src` to SVG.
    *
    * `version` is the LilyPond version hint ("stable" | "unstable"), derived
-   * from the `\version` in the source. Renderers that only ship one LilyPond
-   * (e.g. the wasm one) may ignore it.
+   * from the `\version` in the source. The native renderer uses its managed
+   * LilyPond version and lets the compiler report incompatible source versions.
    */
   renderSvg(src: string, version: "stable" | "unstable"): Promise<RenderResult>;
 
@@ -41,4 +38,6 @@ export interface SvgRenderer {
    * Release any resources (worker, etc.). Safe to call multiple times.
    */
   destroy(): void;
+  /** Cancel stale preview work when the score changes. */
+  cancel?(): void;
 }

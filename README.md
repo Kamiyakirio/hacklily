@@ -1,69 +1,75 @@
-# Hacklily
+# Hacklily Desktop
 
-## What is Hacklily?
+Hacklily is a desktop sheet music editor built with React, Monaco, and Tauri 2. Write LilyPond source, preview SVG pages, listen to MIDI, and export PDF locally.
 
-Hacklily is an online sheet-music editor. You write [LilyPond](http://lilypond.org/) in a Monaco-powered editor in your browser and get a live rendered preview (SVG/PDF/PNG/MIDI). Scores can be saved to and published directly to GitHub, and MusicXML files can be imported via `musicxml2ly`.
+## Development
 
-[**Open Hacklily →**](https://www.hacklily.org)
-
-## How it works
-
-Hacklily has three parts:
-
-- **Frontend** (`src/`) — a React 19 SPA bundled with Vite. Monaco provides the editor; the preview talks to the renderer over a JSON-RPC 2.0 WebSocket. Entry points include: `index` (the editor), `status` (a public server-status page), and `musicxml2ly` (the MusicXML importer).
-- **Renderer** (`server/renderer/` and `server/renderer-unstable/`) — Docker images that build LilyPond from source (stable 2.26, unstable 2.27). Each container runs a warm LilyPond Scheme server (`lily-server.scm`) and a bash frame (`render-impl.bash`) that reads one JSON request per line on stdin and emits one JSON response per line on stdout.
-- **Renderer server** (`server/renderer-server/`, Rust) — a single binary that does three jobs: in `serve` mode it is the frontend-facing coordinator (WebSocket JSON-RPC, GitHub OAuth, a public `get_status` page) **and** the local render pool; in `ws-worker` mode it offers compute to a remote coordinator; in `batch` mode it renders test cases from a file. It keeps a pool of renderer containers warm, routes render requests (stable vs. unstable, picked from the score's `\version`), enforces an 8s render timeout, and tears down and replaces containers after each request for isolation. A coordinator with `--stable-worker-count 0 --unstable-worker-count 0` runs in pure-coordinator mode, dispatching renders to remote `ws-worker` peers (and failing requests if none are attached). The legacy Qt5 coordinator that used to live in `server/ws-server/` has been removed.
-
-## Running locally
-
-You need Node.js 22.22.2+, 24.15.0+, or 26+ (see `engines` in `package.json`) and Docker.
+Install Node.js (see `engines` in `package.json`), Rust, and [Tauri's platform prerequisites](https://v2.tauri.app/start/prerequisites/). Windows requires the MSVC Rust toolchain, the Visual Studio Desktop development with C++ workload, and WebView2. Check that `cargo --version` works in the terminal before starting.
 
 ```bash
-# frontend (without GitHub integration)
 npm install
-npm start          # http://localhost:3000, talks to the remote render backend by default
-
-# or, with the local backend:
-npm start          # in one shell — REACT_APP_BACKEND_WS_URL defaults to the prod backend
-cd server/renderer-server
-cargo run -- \
-  --stable-docker-tag hacklily-renderer \
-  --unstable-docker-tag hacklily-renderer-unstable \
-  --stable-worker-count 4 --unstable-worker-count 4 \
-  --render-timeout-msec 8000 \
-  serve --ws-port 2000 --github-client-id "" --github-secret ""
+npm run tauri dev
 ```
 
-`npm start:remote-backend` runs the dev server pointed at the production render backend (`wss://render.hacklily.org/rpc`), so you don't need Docker for most frontend work.
+`npm run desktop:dev` is an alias. Tauri starts Vite on port 1420 and opens the editor. `npm start` runs just the frontend for UI work; native rendering and file dialogs require the desktop window.
 
-## Deployment
+## Local LilyPond engine
 
-The `serve` coordinator listens on **plain TCP** (`--ws-port`, bound to `127.0.0.1` by default via `--bind-address`) and does **not** terminate TLS itself. In production it sits behind a TLS-terminating reverse proxy: the proxy presents the public `wss://…` certificate and forwards plain `ws://` to the coordinator's port. The coordinator ignores the HTTP path (it upgrades any WebSocket handshake), so the proxy can route `/rpc` or any other path to it. The same reverse proxy that fronts the SPA can do this — just add a WebSocket-capable location block proxying to the coordinator port and ensure it passes through `Upgrade`/`Connection` headers.
+On first launch, the app downloads the official LilyPond 2.26.0 distribution for the current platform, verifies its pinned SHA-256 checksum, and extracts it into `./lilypond/` **next to the application executable**. The complete directory layout, fonts, Scheme files, and helper programs are retained. No global LilyPond installation or PATH changes are needed. The executable's directory must be writable.
 
-The coordinator also supports an optional **HTTP status endpoint** (`--http-status-port`, e.g. `9990`) that serves `GET /status` as JSON — the same data as the WebSocket `get_status` RPC but over plain HTTP, so monitoring scripts and load balancers don't need a WebSocket connection. The nginx site config in `server/renderer-server/deploy/nginx/` proxies `https://render.hacklily.org/status` to it.
+For example, when `Hacklily` is installed in `C:\Apps\Hacklily`, its Windows engine is stored in:
 
-Graceful shutdown: send the process **SIGTERM** (this is what systemd, k8s, and `docker stop` send). The coordinator drains in-flight renders and exits 0; because a single render can take up to the render timeout (~8s), set the supervisor's termination grace period to exceed that so in-flight user renders aren't cut off mid-deploy. (SIGINT / Ctrl-C does the same thing for interactive use.)
+```text
+C:\Apps\Hacklily\
+  hacklily-desktop.exe
+  lilypond\
+    2.26.0-windows-x86_64\
+      bin\lilypond.exe
+      bin\python.exe
+      bin\musicxml2ly.py
+      libexec\
+      share\
+```
 
-A ready-to-use **systemd user service** (unit file, env template, install + update scripts, and docs) lives in [`server/renderer-server/deploy/`](server/renderer-server/deploy/). It runs the `serve` coordinator, restarts on crashes, pulls the published crate and renderer images from the public Forgejo registries (no credentials stored on the host), and updates with a single `hacklily-renderer-update` command that pulls the latest versions and restarts. See [`server/renderer-server/deploy/README.md`](server/renderer-server/deploy/README.md) for install and usage.
+During development, the executable lives in `src-tauri/target/debug/`, so the engine is downloaded into `src-tauri/target/debug/lilypond/`. Release builds use `src-tauri/target/release/lilypond/`. The shell's current working directory does not determine the engine location.
 
-## Status
+After installation, previewing and exporting work offline. React calls narrow Tauri commands; Rust writes a temporary `.ly` file, launches local LilyPond, collects SVG/PDF/MIDI and diagnostics, and removes temporary output. Preview work is serialized, stale requests are cancelled, and compilation has a 60-second timeout. SVG point-and-click links return to the original source line without the old server's injected-line offset.
 
-Hacklily is stable and live at <https://www.hacklily.org>.
+The official packages configured here support Windows x86_64, Linux x86_64, and macOS x86_64/arm64. Download URLs and checksums are recorded in `src-tauri/src/engine.rs`; package metadata comes from [LilyPond's official GitLab release](https://gitlab.com/lilypond/lilypond/-/releases/v2.26.0).
 
-## Contributing
+## Files and export
 
-The source and issue tracker for Hacklily is my Forgejo instance, <https://slop.nettek.ca/jocelyn-stericker/hacklily>.
+- Open and save `.ly` files using native file dialogs. Save as creates a copy.
+- `Ctrl/Cmd+S` saves, `Ctrl/Cmd+Shift+S` saves as, `Ctrl/Cmd+O` opens, and `Ctrl/Cmd+N` creates a score.
+- Import MusicXML using the `musicxml2ly` included in the downloaded distribution.
+- PDF export compiles the current source locally; MIDI export uses the current preview's MIDI data.
+- Unsaved changes are kept as a browser-storage draft and checked before replacing a document or closing the window.
 
-I love receiving emails from people using Hacklily. My preferred way of receiving suggestions, issues, or patches is by email, `jocelyn@nettek.ca`.
+GitHub login, publishing, and the online file library have been removed. The desktop app does not use the former renderer server or the WebAssembly renderer; LilyPond WASM assets are not included in its bundle. Historical server and WASM build sources remain in the repository, independent of the desktop app.
 
-You can also:
+LilyPond can execute Scheme embedded in scores. Compile only scores you trust; local compilation runs with the desktop user's permissions.
 
-- send a PR or issue to the GitHub mirror: <https://github.com/jocelyn-stericker/hacklily>
-- Reach out to me on Mastodon: [@emilyskidsister@hachyderm.io](https://hachyderm.io/@emilyskidsister)
-- send me an email if you wish to get a login for my Forgejo instance
+## Build and validation
 
-Contributions must be licensed AGPLv3-or-later. Feel free to use AI, but please be mindful that I will need to read the patch.
+```bash
+npm test
+npm run desktop:build
+```
+
+Installers are generated under `src-tauri/target/release/bundle/`. The downloaded engine is not embedded in the installer; each installation prepares its own engine on first launch.
+
+Native tests:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+```
+
+The real-engine smoke test checks SVG, source links, PDF, MIDI, and compilation errors. Set `HACKLILY_TEST_ENGINE` to an extracted official `lilypond` executable and run:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml --lib -- --include-ignored
+```
 
 ## License
 
-GNU Affero General Public License version 3 or later
+Hacklily is copyright © 2017–present Jocelyn Stericker and licensed under GNU AGPLv3-or-later. LilyPond is separate GNU GPL software; its downloaded distribution retains its license and notices. The upstream project is hosted at <https://slop.nettek.ca/jocelyn-stericker/hacklily>.

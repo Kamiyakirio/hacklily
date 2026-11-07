@@ -11,10 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MakelilyRouteImport } from './routes/makelily'
-import { Route as Musicxml2lyRouteImport } from './routes/musicxml2ly'
 import { Route as SatieRouteImport } from './routes/satie'
-import { Route as StatusRouteImport } from './routes/status'
-import { Route as WasmRouteImport } from './routes/wasm'
 import { Route as SatieIndexRouteImport } from './routes/satie/index'
 import { Route as SatieSandboxRouteImport } from './routes/satie/sandbox'
 import { Route as SatieTestsRouteImport } from './routes/satie/tests'
@@ -30,24 +27,9 @@ const MakelilyRoute = MakelilyRouteImport.update({
   path: '/makelily',
   getParentRoute: () => rootRouteImport,
 } as any)
-const Musicxml2lyRoute = Musicxml2lyRouteImport.update({
-  id: '/musicxml2ly',
-  path: '/musicxml2ly',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SatieRoute = SatieRouteImport.update({
   id: '/satie',
   path: '/satie',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StatusRoute = StatusRouteImport.update({
-  id: '/status',
-  path: '/status',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WasmRoute = WasmRouteImport.update({
-  id: '/wasm',
-  path: '/wasm',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SatieIndexRoute = SatieIndexRouteImport.update({
@@ -74,10 +56,7 @@ const SatieTestsIdRoute = SatieTestsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/makelily': typeof MakelilyRoute
-  '/musicxml2ly': typeof Musicxml2lyRoute
   '/satie': typeof SatieRouteWithChildren
-  '/status': typeof StatusRoute
-  '/wasm': typeof WasmRoute
   '/satie/sandbox': typeof SatieSandboxRoute
   '/satie/tests': typeof SatieTestsRouteWithChildren
   '/satie/': typeof SatieIndexRoute
@@ -86,9 +65,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/makelily': typeof MakelilyRoute
-  '/musicxml2ly': typeof Musicxml2lyRoute
-  '/status': typeof StatusRoute
-  '/wasm': typeof WasmRoute
   '/satie/sandbox': typeof SatieSandboxRoute
   '/satie/tests': typeof SatieTestsRouteWithChildren
   '/satie': typeof SatieIndexRoute
@@ -98,10 +74,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/makelily': typeof MakelilyRoute
-  '/musicxml2ly': typeof Musicxml2lyRoute
   '/satie': typeof SatieRouteWithChildren
-  '/status': typeof StatusRoute
-  '/wasm': typeof WasmRoute
   '/satie/sandbox': typeof SatieSandboxRoute
   '/satie/tests': typeof SatieTestsRouteWithChildren
   '/satie/': typeof SatieIndexRoute
@@ -112,10 +85,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/makelily'
-    | '/musicxml2ly'
     | '/satie'
-    | '/status'
-    | '/wasm'
     | '/satie/sandbox'
     | '/satie/tests'
     | '/satie/'
@@ -124,9 +94,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/makelily'
-    | '/musicxml2ly'
-    | '/status'
-    | '/wasm'
     | '/satie/sandbox'
     | '/satie/tests'
     | '/satie'
@@ -135,10 +102,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/makelily'
-    | '/musicxml2ly'
     | '/satie'
-    | '/status'
-    | '/wasm'
     | '/satie/sandbox'
     | '/satie/tests'
     | '/satie/'
@@ -148,10 +112,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   MakelilyRoute: typeof MakelilyRoute
-  Musicxml2lyRoute: typeof Musicxml2lyRoute
   SatieRoute: typeof SatieRouteWithChildren
-  StatusRoute: typeof StatusRoute
-  WasmRoute: typeof WasmRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -170,32 +131,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MakelilyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/musicxml2ly': {
-      id: '/musicxml2ly'
-      path: '/musicxml2ly'
-      fullPath: '/musicxml2ly'
-      preLoaderRoute: typeof Musicxml2lyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/satie': {
       id: '/satie'
       path: '/satie'
       fullPath: '/satie'
       preLoaderRoute: typeof SatieRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/status': {
-      id: '/status'
-      path: '/status'
-      fullPath: '/status'
-      preLoaderRoute: typeof StatusRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/wasm': {
-      id: '/wasm'
-      path: '/wasm'
-      fullPath: '/wasm'
-      preLoaderRoute: typeof WasmRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/satie/': {
@@ -258,10 +198,7 @@ const SatieRouteWithChildren = SatieRoute._addFileChildren(SatieRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   MakelilyRoute: MakelilyRoute,
-  Musicxml2lyRoute: Musicxml2lyRoute,
   SatieRoute: SatieRouteWithChildren,
-  StatusRoute: StatusRoute,
-  WasmRoute: WasmRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

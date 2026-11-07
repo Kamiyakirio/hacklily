@@ -3,6 +3,9 @@
 # dependencies
 /node_modules
 
+# Native LilyPond engines downloaded next to the app executable
+lilypond/
+
 # testing
 /coverage
 

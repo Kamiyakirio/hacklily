@@ -1,201 +1,50 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
-import { memo } from "react";
-
-import { Button } from "#/components/ui/button.tsx";
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog.tsx";
+} from "#/components/ui/dialog";
+import { openExternal } from "#/lib/NativeRenderer";
 
-interface Props {
-  onHide(): void;
-}
-
-/**
- * The About dialog, accessible through the menu in the header.
- */
-const ModalAbout = memo(function ModalAbout(props: Props) {
+export default function ModalAbout({ onHide }: { onHide(): void }) {
   return (
-    <Dialog open onOpenChange={(open) => !open && props.onHide()}>
-      <DialogContent className="sm:max-w-[565px]">
+    <Dialog open onOpenChange={(open) => !open && onHide()}>
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>About Hacklily</DialogTitle>
+          <DialogTitle>Hacklily</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-2">
-          <p>
-            Hacklily is an online sheet-music editor and publishing tool. It is
-            powered by{" "}
-            <a
-              className="underline cursor-pointer text-blue-500"
-              href="http://lilypond.org/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              LilyPond
-            </a>
-            . New to LilyPond? Take a look at the{" "}
-            <a
-              className="underline cursor-pointer text-blue-500"
-              href={`http://lilypond.org/doc/v${
-                process.env.REACT_APP_STABLE_LILYPOND_VERSION?.split(".")
-                  .slice(0, 2)
-                  .join(".") ?? "2.26"
-              }/Documentation/learning/tutorial`}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              tutorial
-            </a>
-            !
-          </p>
-          <p>
-            You can view Hacklily&apos;s source and contribute code on{" "}
-            <a
-              className="underline cursor-pointer text-blue-500"
-              href="https://slop.nettek.ca/jocelyn-stericker/hacklily"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Forgejo
-            </a>
-            .
-          </p>
-          <p>
-            Hacklily counts anonymous, cookieless usage stats with{" "}
-            <a
-              className="underline cursor-pointer text-blue-500"
-              href="https://www.goatcounter.com"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              GoatCounter
-            </a>{" "}
-            to see which features get used &mdash; nothing that identifies you.
-            You can see the numbers for yourself at{" "}
-            <a
-              href="https://stats.hacklily.org"
-              target="_blank"
-              className="underline cursor-pointer text-blue-500"
-              rel="noopener noreferrer"
-            >
-              stats.hacklily.org
-            </a>
-            .
-          </p>
-          {renderLilyPondVersions()}
-          <div
-            className="text-xs text-muted-foreground flex flex-col gap-2"
-            style={{ position: "relative" }}
-          >
-            <p>
-              This project is{" "}
-              <a
-                className="underline cursor-pointer text-blue-500"
-                href="https://www.fsf.org/about/what-is-free-software"
-              >
-                free software
-              </a>
-              : you can redistribute it and/or modify it under the terms of the
-              GNU Affero General Public License (GNU AGPL) as published by the
-              Free Software Foundation, either version 3 of the License, or (at
-              your option) any later version. The code is distributed WITHOUT
-              ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-              or FITNESS FOR A PARTICULAR PURPOSE. See the GNU AGPL for more
-              details.
-            </p>
-            <p>
-              <a
-                className="underline cursor-pointer text-blue-500"
-                href="https://www.gnu.org/licenses/agpl-3.0.html"
-              >
-                Read the GNU Affero General Public License version 3.
-                <span className="absolute bottom-0 right-0 max-[530px]:hidden">
-                  <img
-                    src="agplv3-155x51.png"
-                    alt="Licensed under the GNU Affero General Public License version 3"
-                  />
-                </span>
-              </a>
-            </p>
-            <p>
-              See{" "}
-              <a
-                className="underline cursor-pointer text-blue-500"
-                href="privacy-statement.html"
-              >
-                privacy statement
-              </a>
-              .
-            </p>
-            <p>
-              &copy; Copyright{" "}
-              <a
-                className="underline cursor-pointer text-blue-500"
-                href="https://nettek.ca"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Jocelyn Stericker
-              </a>{" "}
-              2017 - present. 🇨🇦
-            </p>
-          </div>
-        </div>
+        <p>A desktop sheet music editor powered by LilyPond.</p>
+        <p>
+          Edit LilyPond source, preview your score, and export PDF or MIDI
+          locally. Your scores can be opened and saved as files on your
+          computer.
+        </p>
+        <p>LilyPond engine: 2.26.0</p>
+        <p className="text-sm text-muted-foreground">
+          Copyright © 2017–present Jocelyn Stericker. Hacklily is free software
+          licensed under the GNU Affero General Public License, version 3 or
+          later.
+        </p>
         <DialogFooter>
-          <Button onClick={props.onHide} variant="outline">
+          <Button variant="outline" onClick={onHide}>
             Close
           </Button>
           <Button
-            variant="default"
             onClick={() =>
-              window.open(
-                `http://lilypond.org/doc/v${
-                  process.env.REACT_APP_STABLE_LILYPOND_VERSION?.split(".")
-                    .slice(0, 2)
-                    .join(".") ?? "2.26"
-                }/Documentation/learning/tutorial`,
-                "_blank",
-                "noopener noreferrer",
+              openExternal(
+                "https://lilypond.org/doc/v2.26/Documentation/learning/tutorial",
               )
             }
           >
-            Start Tutorial
+            Start tutorial
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-});
-
-function renderLilyPondVersions() {
-  const stable: string | undefined =
-    process.env.REACT_APP_STABLE_LILYPOND_VERSION;
-  const unstable: string | undefined =
-    process.env.REACT_APP_UNSTABLE_LILYPOND_VERSION;
-  if (!stable && !unstable) {
-    return null;
-  }
-  return (
-    <p>
-      LilyPond renderer versions:{" "}
-      {stable && (
-        <span>
-          stable <strong>{stable}</strong>
-        </span>
-      )}
-      {stable && unstable && " · "}
-      {unstable && (
-        <span>
-          unstable <strong>{unstable}</strong>
-        </span>
-      )}
-    </p>
-  );
 }
-
-export default ModalAbout;

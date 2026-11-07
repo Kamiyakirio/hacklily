@@ -23,12 +23,7 @@ interface Props {
  * This is the "Do you want to save your changes" modal you get when you load a song
  * while the current one has unsaved changes in the current song.
  *
- * Now, we could instead just redirect the user, since we do store the code for
- * ALL songs that are dirty in localStorage, but that may result in the user being
- * confused when she or he tries editing the song somewhere else and isn't sure where
- * the source went. Multiple sources of truth are bad in this case. So we leave this
- * feature only for the case when the tab is closed without saving. In no case will
- * the page change while leaving dirty state for the old song.
+ * Runs before replacing the current local document or closing its window.
  *
  * This modal requests to be closed by calling one of the three callbacks.
  */

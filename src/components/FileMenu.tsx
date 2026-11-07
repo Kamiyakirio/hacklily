@@ -9,7 +9,6 @@ import {
   FileText,
   FolderOpen,
   Import,
-  LogOut,
   Music,
   Save,
 } from "lucide-react";
@@ -21,146 +20,84 @@ import {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-} from "#/components/ui/dropdown-menu.tsx";
-import type { Auth } from "#/lib/auth";
+} from "#/components/ui/dropdown-menu";
+import { openExternal } from "#/lib/NativeRenderer";
 
 interface Props {
-  auth: Auth | null;
-  canCreateNew: boolean;
-  canExport: boolean;
   canSave: boolean;
-  canSaveAs: boolean;
-  songURL: string | null;
-  onExportLy(): any;
-  onExportMIDI(): any;
-  onExportPDF(): any;
-  onDeleteSong(song: string): void;
-  onLoadSong(song: string): void;
-  onShowAbout(): void;
-  onShowClone(): void;
-  onShowOpen(): void;
+  canExport: boolean;
+  midiAvailable: boolean;
   onShowNew(): void;
-  onShowPublish(): void;
-  onSignIn(): void;
-  onSignOut(): void;
+  onShowOpen(): void;
+  onSave(): void;
+  onSaveAs(): void;
+  onImportMusicXML(): void;
+  onExportLy(): void;
+  onExportPDF(): void;
+  onExportMIDI(): void;
+  onShowAbout(): void;
 }
 
-/**
- * Renders the File menu.
- * The menu button is rendered by <Header />
- */
-const FileMenu = memo(function FileMenu(props: Props) {
-  const {
-    auth,
-    canCreateNew,
-    canExport,
-    canSave,
-    canSaveAs,
-    onSignOut,
-    onShowAbout,
-    onShowClone,
-    onShowOpen,
-    onExportLy,
-    onExportMIDI,
-    onExportPDF,
-    onShowNew,
-    onShowPublish,
-    songURL,
-  } = props;
-
-  const signOut = auth ? (
-    <DropdownMenuItem onClick={onSignOut}>
-      <LogOut size="1em" className="inline" />
-      Sign out
-    </DropdownMenuItem>
-  ) : null;
-
-  const tutorial = (
-    <DropdownMenuItem
-      onClick={() =>
-        window.open(
-          `http://lilypond.org/doc/v${
-            process.env.REACT_APP_STABLE_LILYPOND_VERSION?.split(".")
-              .slice(0, 2)
-              .join(".") ?? "2.26"
-          }/Documentation/learning/index`,
-          "_blank",
-          "noopener noreferrer",
-        )
-      }
-    >
-      LilyPond manual&hellip;
-    </DropdownMenuItem>
-  );
-
-  const about = (
-    <DropdownMenuItem onClick={onShowAbout}>About Hacklily</DropdownMenuItem>
-  );
-
+export default memo(function FileMenu(props: Props) {
   return (
     <>
-      <DropdownMenuItem onClick={onShowNew} disabled={!canCreateNew}>
-        <CirclePlus size="1em" className="inline" />
-        New song
+      <DropdownMenuItem onClick={props.onShowNew} disabled={!props.canSave}>
+        <CirclePlus size="1em" /> New song
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={props.onShowOpen} disabled={!props.canSave}>
+        <FolderOpen size="1em" /> Open…
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        onClick={props.onImportMusicXML}
+        disabled={!props.canSave || !props.canExport}
+      >
+        <Import size="1em" /> Import MusicXML…
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={onShowOpen}>
-        <FolderOpen size="1em" className="inline" />
-        Open&hellip;
+      <DropdownMenuItem onClick={props.onSave} disabled={!props.canSave}>
+        <Save size="1em" /> Save
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={() => window.open("/musicxml2ly", "_self")}>
-        <Import size="1em" className="inline" />
-        Import MusicXML&hellip;
+      <DropdownMenuItem onClick={props.onSaveAs} disabled={!props.canSave}>
+        <Copy size="1em" /> Save as…
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={onShowPublish} disabled={!canSave}>
-        <Save size="1em" className="inline" />
-        Save
-      </DropdownMenuItem>
-      <DropdownMenuItem onClick={onShowClone} disabled={!canSaveAs}>
-        <Copy size="1em" className="inline" />
-        Save as&hellip;
-      </DropdownMenuItem>
-      <DropdownMenuSub disabled={!canExport}>
+      <DropdownMenuSub>
         <DropdownMenuSubTrigger>
-          <Download size="1em" className="inline" />
-          Export
+          <Download size="1em" /> Export
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
-          <DropdownMenuItem onClick={onExportLy} disabled={!canExport}>
-            <Code size="1em" className="inline" />
-            LilyPond source
+          <DropdownMenuItem
+            onClick={props.onExportLy}
+            disabled={!props.canSave}
+          >
+            <Code size="1em" /> LilyPond source
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onExportPDF} disabled={!canExport}>
-            <FileText size="1em" className="inline" />
-            PDF
+          <DropdownMenuItem
+            onClick={props.onExportPDF}
+            disabled={!props.canExport}
+          >
+            <FileText size="1em" /> PDF
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onExportMIDI} disabled={!canExport}>
-            <Music size="1em" className="inline" />
-            MIDI
+          <DropdownMenuItem
+            onClick={props.onExportMIDI}
+            disabled={!props.canExport || !props.midiAvailable}
+          >
+            <Music size="1em" /> MIDI
           </DropdownMenuItem>
-          {songURL && <DropdownMenuSeparator />}
-          {songURL && (
-            <DropdownMenuItem
-              onClick={() =>
-                window.open(songURL.replace(/\.ly$/, ".pdf"), "_blank")
-              }
-            >
-              View on GitHub&hellip;
-            </DropdownMenuItem>
-          )}
         </DropdownMenuSubContent>
       </DropdownMenuSub>
-      {signOut ? (
-        <>
-          <DropdownMenuSeparator />
-          {signOut}
-        </>
-      ) : null}
       <DropdownMenuSeparator />
-      {tutorial}
-      {about}
+      <DropdownMenuItem
+        onClick={() =>
+          openExternal(
+            "https://lilypond.org/doc/v2.26/Documentation/learning/index",
+          )
+        }
+      >
+        LilyPond manual…
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={props.onShowAbout}>
+        About Hacklily
+      </DropdownMenuItem>
     </>
   );
 });
-
-export default FileMenu;
