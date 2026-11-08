@@ -22,6 +22,8 @@ function headerProps(midi: ArrayBuffer): ComponentProps<typeof Header> {
     onImportMusicXML: vi.fn(),
     mode: "both",
     windowWidth: 1000,
+    wordWrap: false,
+    onWordWrapChanged: vi.fn(),
     onModeChanged: vi.fn(),
     onShowMakelily: vi.fn(),
     onShowNew: vi.fn(),
@@ -31,6 +33,7 @@ function headerProps(midi: ArrayBuffer): ComponentProps<typeof Header> {
     onExportPDF: vi.fn(),
     onShowAbout: vi.fn(),
     onShowFileAssociations: vi.fn(),
+    onInsertNotation: vi.fn(),
   };
 }
 

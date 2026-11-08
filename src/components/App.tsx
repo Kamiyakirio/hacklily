@@ -34,12 +34,14 @@ import Header, { MIN_BOTH_WIDTH, MODE_BOTH, MODE_VIEW } from "./Header";
 import ModalAbout from "./ModalAbout";
 import ModalFileAssociations from "./ModalFileAssociations";
 import ModalUnsavedChangesInterstitial from "./ModalUnsavedChangesInterstitial";
+import NewScoreWizard from "./NewScoreWizard";
 import Preview from "./Preview";
 import { Button } from "./ui/button";
 import { useColourScheme } from "./useColourScheme";
 
 const Makelily = lazy(() => import("./Makelily"));
 const DRAFT_KEY = "hacklily.desktop.draft";
+const WORD_WRAP_KEY = "hacklily.desktop.wordWrap";
 const DEFAULT_SONG = `\\version "2.26.0"
 
 \\header {
@@ -59,7 +61,13 @@ interface Score {
   savedSrc: string;
   includeDir: string | null;
 }
-type Action = "new" | "open" | "import" | "close" | { file: ScoreFile };
+type Action =
+  | "new"
+  | "open"
+  | "import"
+  | "close"
+  | { file: ScoreFile }
+  | { newScore: string };
 
 function newScore(): Score {
   return {
@@ -107,6 +115,13 @@ export default function App() {
     window.innerWidth >= MIN_BOTH_WIDTH ? MODE_BOTH : MODE_VIEW,
   );
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [wordWrap, setWordWrap] = useState(() => {
+    try {
+      return localStorage.getItem(WORD_WRAP_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const [logs, setLogs] = useState<string | null>(null);
   const [midi, setMidi] = useState<ArrayBuffer | null>(null);
   const [compiledSource, setCompiledSource] = useState<string | null>(null);
@@ -123,6 +138,7 @@ export default function App() {
   const [pendingAction, setPendingAction] = useState<Action | null>(null);
   const [about, setAbout] = useState(false);
   const [associations, setAssociations] = useState(false);
+  const [newWizard, setNewWizard] = useState(false);
   const [openPaths, setOpenPaths] = useState<string[]>([]);
   const [tool, setTool] = useState<
     | (MakelilyProps & {
@@ -144,6 +160,13 @@ export default function App() {
   const currentMidi = compiledSource === score.src ? midi : null;
 
   useEffect(() => () => renderer.cancel(), [renderer]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(WORD_WRAP_KEY, String(wordWrap));
+    } catch {
+      /* Wrapping still works when preferences cannot be saved. */
+    }
+  }, [wordWrap]);
   useEffect(() => {
     let active = true;
     void prepareEngine((progress) => {
@@ -235,11 +258,21 @@ export default function App() {
       await getCurrentWindow().destroy();
       return;
     }
-    if (action === "new") {
-      setScore(newScore());
+    if (typeof action === "object" && "newScore" in action) {
+      setScore({
+        src: action.newScore,
+        savedSrc: "",
+        path: null,
+        includeDir: null,
+      });
       setLogs(null);
       setMidi(null);
       setCompiledSource(null);
+      setSelection(null);
+      return;
+    }
+    if (action === "new") {
+      setNewWizard(true);
       return;
     }
     setBusy(true);
@@ -271,6 +304,10 @@ export default function App() {
 
   function request(action: Action) {
     if (busy) return;
+    if (action === "new") {
+      if (!pendingAction) setNewWizard(true);
+      return;
+    }
     if (dirty) setPendingAction(action);
     else void execute(action);
   }
@@ -294,7 +331,7 @@ export default function App() {
     request({ file }),
   );
   useEffect(() => {
-    if (busy || pendingAction || !openPaths.length) return;
+    if (busy || pendingAction || newWizard || !openPaths.length) return;
     let active = true;
     void openScorePath(openPaths[0])
       .then((file) => {
@@ -310,7 +347,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [openPaths, busy, pendingAction]);
+  }, [openPaths, busy, pendingAction, newWizard]);
 
   async function exportFile(format: "pdf" | "midi" | "ly") {
     if (busy) return;
@@ -342,6 +379,11 @@ export default function App() {
   });
   const handleKey = useEffectEvent((event: KeyboardEvent) => {
     if (!(event.ctrlKey || event.metaKey)) return;
+    if (newWizard) {
+      if (["s", "o", "n", "p"].includes(event.key.toLowerCase()))
+        event.preventDefault();
+      return;
+    }
     switch (event.key.toLowerCase()) {
       case "s":
         event.preventDefault();
@@ -390,6 +432,8 @@ export default function App() {
         mode={mode}
         midi={currentMidi}
         windowWidth={windowWidth}
+        wordWrap={wordWrap}
+        onWordWrapChanged={setWordWrap}
         canExport={engine.ready && !busy}
         canSave={!busy}
         midiAvailable={!!currentMidi}
@@ -402,6 +446,10 @@ export default function App() {
         onSaveAs={() => void save(true)}
         onShowAbout={() => setAbout(true)}
         onShowFileAssociations={() => setAssociations(true)}
+        onInsertNotation={(code) => {
+          if (mode === MODE_VIEW) setMode("edit");
+          editor.current?.insertNotation(code);
+        }}
         onExportLy={() => void exportFile("ly")}
         onExportPDF={() => void exportFile("pdf")}
         onExportMIDI={() => void exportFile("midi")}
@@ -430,6 +478,8 @@ export default function App() {
           ref={editor}
           code={score.src}
           colourScheme={colourScheme}
+          wordWrap={wordWrap}
+          onWordWrapChanged={setWordWrap}
           mode={mode}
           logs={logs}
           defaultSelection={selection}
@@ -504,6 +554,15 @@ export default function App() {
         )}
       </EditorPreviewLayout>
       {about && <ModalAbout onHide={() => setAbout(false)} />}
+      {newWizard && (
+        <NewScoreWizard
+          onHide={() => setNewWizard(false)}
+          onCreate={(source) => {
+            setNewWizard(false);
+            request({ newScore: source });
+          }}
+        />
+      )}
       {associations && (
         <ModalFileAssociations onHide={() => setAssociations(false)} />
       )}

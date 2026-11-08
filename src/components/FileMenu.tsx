@@ -43,7 +43,7 @@ export default memo(function FileMenu(props: Props) {
   return (
     <>
       <DropdownMenuItem onClick={props.onShowNew} disabled={!props.canSave}>
-        <CirclePlus size="1em" /> New song
+        <CirclePlus size="1em" /> New song…
       </DropdownMenuItem>
       <DropdownMenuItem onClick={props.onShowOpen} disabled={!props.canSave}>
         <FolderOpen size="1em" /> Open…

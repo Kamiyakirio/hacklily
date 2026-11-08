@@ -1,6 +1,18 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@font-face {
+  font-family: "Hacklily Bravura";
+  src: url("/vendor/bravura/woff/Bravura.woff") format("woff");
+  font-display: swap;
+}
+
+.music-notation-glyph {
+  font-family: "Hacklily Bravura", serif;
+  font-weight: normal;
+  line-height: 1.5;
+}
+
 /*
  * shadcn/ui (Base UI flavor) design tokens, ported from braat/src/styles.css.
  * The components under src/components/ui/* reference these semantic tokens

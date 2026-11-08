@@ -11,6 +11,7 @@ import {
   PenLine,
   Play,
   Rewind,
+  WrapText,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useReducer, useRef, useState } from "react";
@@ -21,6 +22,7 @@ import { ButtonGroup } from "#/components/ui/button-group";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
@@ -35,6 +37,7 @@ import { mergeState } from "#/lib/state";
 import { cn } from "#/lib/utils";
 
 import logoSvg from "./logo.svg";
+import MusicNotationPalette from "./MusicNotationPalette";
 
 export type ViewMode = "view" | "edit" | "both";
 export const MODE_VIEW: ViewMode = "view";
@@ -65,6 +68,8 @@ interface Props {
   midi: ArrayBuffer | null;
   mode: ViewMode;
   windowWidth: number;
+  wordWrap: boolean;
+  onWordWrapChanged(enabled: boolean): void;
   onModeChanged(mode: ViewMode): void;
   onShowMakelily(tool: string): void;
   onShowNew(): void;
@@ -77,6 +82,7 @@ interface Props {
   onImportMusicXML(): void;
   onShowAbout(): void;
   onShowFileAssociations(): void;
+  onInsertNotation(code: string): void;
 }
 
 interface State {
@@ -91,6 +97,7 @@ interface State {
  * Renders the top of the app.
  */
 export default function Header(props: Props) {
+  const [showNotations, setShowNotations] = useState(false);
   const [state, updateState] = useReducer(mergeState<State>, {
     played: false,
     playing: false,
@@ -381,6 +388,12 @@ export default function Header(props: Props) {
                 <ChevronDown size="1em" className="inline" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="min-w-48">
+                <DropdownMenuItem
+                  disabled={!canSave}
+                  onClick={() => setShowNotations(true)}
+                >
+                  <Music size="1em" className="inline" /> Common music symbols…
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleShowClef}>
                   Clef&hellip;
                 </DropdownMenuItem>
@@ -398,9 +411,37 @@ export default function Header(props: Props) {
             </DropdownMenu>
           )}
           {viewMode}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="View"
+              render={<Button variant="outline" />}
+            >
+              <Eye size="1em" className="inline" />
+              {windowWidth >= MIN_REASONABLE_WIDTH && <span>View</span>}
+              <ChevronDown size="1em" className="inline" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="min-w-52">
+              <DropdownMenuCheckboxItem
+                checked={props.wordWrap}
+                onCheckedChange={props.onWordWrapChanged}
+              >
+                <WrapText size="1em" />
+                Word wrap
+                <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                  Alt+Z
+                </span>
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {played && midi != null ? renderTime() : playButton}
         </ButtonGroup>
       </div>
+      {showNotations && (
+        <MusicNotationPalette
+          onHide={() => setShowNotations(false)}
+          onInsert={props.onInsertNotation}
+        />
+      )}
     </header>
   );
 }

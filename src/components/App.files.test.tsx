@@ -39,6 +39,22 @@ vi.mock("./Editor", () => ({
   ),
 }));
 vi.mock("./Preview", () => ({ default: () => <div>Local preview</div> }));
+vi.mock("./NewScoreWizard", () => ({
+  default: ({
+    onCreate,
+    onHide,
+  }: {
+    onCreate(source: string): void;
+    onHide(): void;
+  }) => (
+    <div role="dialog" aria-label="New score">
+      <button onClick={() => onCreate('\\version "2.26.0"\n% Wizard score')}>
+        Create score
+      </button>
+      <button onClick={onHide}>Cancel wizard</button>
+    </div>
+  ),
+}));
 vi.mock("#/lib/NativeRenderer", () => ({
   default: class {
     cancel() {}
@@ -109,6 +125,12 @@ describe("desktop local documents", () => {
       }),
     );
   }
+  async function createFromWizard() {
+    const create = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent.trim() === "Create score",
+    );
+    await act(async () => create.click());
+  }
 
   it("opens local files and preserves cancellation without replacing the document", async () => {
     native.openScore
@@ -175,6 +197,7 @@ describe("desktop local documents", () => {
     native.saveScore.mockResolvedValue(null);
     await show();
     await shortcut("n");
+    await createFromWizard();
     const save = [...document.querySelectorAll("button")].find(
       (button) => button.textContent.trim() === "Save",
     );
@@ -192,6 +215,7 @@ describe("desktop local documents", () => {
     native.saveScore.mockResolvedValue("C:/Music/score.ly");
     await show();
     await shortcut("n");
+    await createFromWizard();
     const save = [...document.querySelectorAll("button")].find(
       (button) => button.textContent.trim() === "Save",
     );
@@ -204,5 +228,41 @@ describe("desktop local documents", () => {
       '\\version "2.26.0"',
     );
     expect(document.body.textContent).not.toContain("Unsaved changes");
+    expect(
+      JSON.parse(localStorage.getItem("hacklily.desktop.draft")).savedSrc,
+    ).toBe("");
+  });
+
+  it("leaves an unsaved document intact when the wizard is cancelled", async () => {
+    restoreDraft();
+    await show();
+    await shortcut("n");
+    expect(document.body.textContent).not.toContain("Unsaved changes");
+    expect(container.querySelector("textarea").value).toBe("edited");
+    const cancel = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel wizard",
+    );
+    await act(async () => cancel.click());
+    expect(
+      JSON.parse(localStorage.getItem("hacklily.desktop.draft")).path,
+    ).toBe("C:/Music/score.ly");
+    expect(container.querySelector("textarea").value).toBe("edited");
+    expect(native.saveScore).not.toHaveBeenCalled();
+  });
+
+  it("waits to process associated files until the wizard closes", async () => {
+    native.openScorePath.mockResolvedValue({
+      path: "C:/Music/waiting.ly",
+      src: "waiting score",
+    });
+    await show();
+    await shortcut("n");
+    await act(async () => receivePaths(["C:/Music/waiting.ly"]));
+    expect(native.openScorePath).not.toHaveBeenCalled();
+    const cancel = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel wizard",
+    );
+    await act(async () => cancel.click());
+    expect(container.querySelector("textarea").value).toBe("waiting score");
   });
 });

@@ -5,6 +5,7 @@ import * as monacoEditor from "monaco-editor";
 import type { Ref } from "react";
 import {
   useEffect,
+  useEffectEvent,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -35,6 +36,7 @@ export interface EditorHandle {
   findNext(): void;
   getMakelilyProperties(): MakelilyProps;
   insertText(text: string): void;
+  insertNotation(text: string): void;
   selectAll(): void;
 }
 
@@ -43,6 +45,8 @@ interface Props {
   code: string | undefined;
 
   colourScheme: "dark" | "light";
+  wordWrap: boolean;
+  onWordWrapChanged(enabled: boolean): void;
 
   /**
    * When this changes, the selection changes. Used so that when you click on a
@@ -205,6 +209,31 @@ export default function Editor({ ref, ...props }: Props) {
     }
   }
 
+  function insertNotation(text: string): void {
+    const model = editorInstance?.getModel();
+    const selection = editorInstance?.getSelection();
+    if (!model || !selection) return;
+    const start = model.getOffsetAt(selection.getStartPosition());
+    const end = model.getOffsetAt(selection.getEndPosition());
+    const source = model.getValue();
+    const before = start > 0 && !/\s/.test(source[start - 1]) ? " " : "";
+    const after = end < source.length && !/\s/.test(source[end]) ? " " : "";
+    const inserted = `${before}${text}${after}`;
+    editorInstance.pushUndoStop();
+    editorInstance.executeEdits("music-notation", [
+      { range: selection, text: inserted },
+    ]);
+    editorInstance.setPosition(model.getPositionAt(start + inserted.length));
+    editorInstance.pushUndoStop();
+    editorInstance.revealPositionInCenterIfOutsideViewport(
+      editorInstance.getPosition(),
+    );
+    // Focus after the palette closes and the editor becomes visible again.
+    requestAnimationFrame(() => {
+      if (editorInstance.getDomNode()?.isConnected) editorInstance.focus();
+    });
+  }
+
   function handleEditorWillMount(monacoModule: typeof monacoEditor): void {
     if (registeredMonacoComponents) {
       return;
@@ -230,12 +259,26 @@ export default function Editor({ ref, ...props }: Props) {
     findNext,
     getMakelilyProperties,
     insertText,
+    insertNotation,
     selectAll,
   }));
 
   useEffect(() => {
     editorInstance?.layout();
   }, [editorInstance, props.mode]);
+  const toggleWordWrap = useEffectEvent(() =>
+    props.onWordWrapChanged(!props.wordWrap),
+  );
+  useEffect(() => {
+    if (!editorInstance) return;
+    const action = editorInstance.addAction({
+      id: "editor.action.toggleWordWrap",
+      label: "Toggle Word Wrap",
+      keybindings: [monacoEditor.KeyMod.Alt | monacoEditor.KeyCode.KeyZ],
+      run: () => toggleWordWrap(),
+    });
+    return () => action.dispose();
+  }, [editorInstance]);
   useEffect(() => {
     if (!editorInstance || !props.defaultSelection) return;
     editorInstance.setSelection(props.defaultSelection);
@@ -283,6 +326,7 @@ export default function Editor({ ref, ...props }: Props) {
   const monacoOptions: monacoEditor.editor.IStandaloneEditorConstructionOptions =
     {
       automaticLayout: true,
+      wordWrap: props.wordWrap ? "on" : "off",
       autoClosingBrackets: "always",
       minimap: {
         enabled: false,
