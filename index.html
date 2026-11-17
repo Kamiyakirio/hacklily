@@ -16,6 +16,8 @@
         should go here
       */
       .App {
+        display: flex;
+        flex-direction: column;
         bottom: 0;
         left: 0;
         overflow: hidden;
@@ -27,8 +29,9 @@
 
       .content {
         background-color: white;
-        height: calc(100% - 50px);
-        position: absolute;
+        flex: 1;
+        min-height: 0;
+        position: relative;
         width: 100%;
       }
 
@@ -37,18 +40,23 @@
       }
 
       .header {
-        background-color: #efefef;
+        background-color: var(--toolbar-background, #efefef);
         border-bottom: 1px solid black;
         display: flex;
         height: 50px;
+        flex-shrink: 0;
         min-width: 321px;
         width: 100%;
         box-sizing: border-box;
       }
 
+      .header.header-with-symbols {
+        border-bottom-color: transparent;
+      }
+
       @media (prefers-color-scheme: dark) {
         .header {
-          background-color: #24343c;
+          background-color: var(--toolbar-background, #24343c);
         }
         .content {
           background-color: #1e1e1e;

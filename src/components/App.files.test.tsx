@@ -132,6 +132,48 @@ describe("desktop local documents", () => {
     await act(async () => create.click());
   }
 
+  it("places the symbol panel below the menu and remembers View visibility", async () => {
+    await show();
+    expect(
+      container
+        .querySelector("header")
+        .nextElementSibling.getAttribute("aria-label"),
+    ).toBe("Music symbol panel");
+    const close = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Hide music symbol panel"]',
+    );
+    await act(async () => close.click());
+    expect(
+      container.querySelector('[aria-label="Music symbol panel"]'),
+    ).toBeNull();
+    expect(localStorage.getItem("hacklily.desktop.musicSymbolPanel")).toBe(
+      "false",
+    );
+    await act(async () => root.render(null));
+    await show();
+    expect(
+      container.querySelector('[aria-label="Music symbol panel"]'),
+    ).toBeNull();
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="View"]')
+        .click(),
+    );
+    const toggle = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitemcheckbox"]',
+      ),
+    ].find((button) => button.textContent.includes("Music symbol panel"));
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    await act(async () => toggle.click());
+    expect(
+      container.querySelector('[aria-label="Music symbol panel"]'),
+    ).not.toBeNull();
+    expect(localStorage.getItem("hacklily.desktop.musicSymbolPanel")).toBe(
+      "true",
+    );
+  });
+
   it("opens local files and preserves cancellation without replacing the document", async () => {
     native.openScore
       .mockResolvedValueOnce({ path: "C:/Music/local.ly", src: "local music" })

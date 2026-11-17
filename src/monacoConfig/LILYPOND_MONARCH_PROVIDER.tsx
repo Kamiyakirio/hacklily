@@ -66,12 +66,17 @@ const LILYPOND_MONARCH_PROVIDER: monacoEditor.languages.IMonarchLanguage = {
       },
       {
         regex:
-          /([-_^](\s*))?(((\\lyrics\s*)({))|((\\lyricmode\s*)({))|((\\addlyrics\s*)({))|((\\lyricsto\s*(".*")\s*)({))|(((\\lyricsto)\s*(\S*)\s*)({)))/,
-        action: {
-          token: "string.d.delim",
-          bracket: "@open",
-          next: "@lyricmode",
-        },
+          /((?:[-_^]\s*)?\\(?:(?:lyrics|lyricmode|addlyrics)\s*|lyricsto\s+(?:"(?:\\.|[^"\\])*"|[^\s{]+)\s*))(\{)/,
+        action: ["keyword", { token: "@brackets", next: "@lyricmode" }],
+      },
+      {
+        regex: /\\[()]/,
+        action: { token: "@brackets" },
+      },
+      {
+        regex: /([-_^](\s*))?\\[<>!]/,
+        // Keep command coloring, but exclude dynamics from bracket matching.
+        action: { token: "keyword.string" },
       },
       {
         regex: /([-_^](\s*))?\\[a-zA-Z-.]*/,
@@ -84,19 +89,6 @@ const LILYPOND_MONARCH_PROVIDER: monacoEditor.languages.IMonarchLanguage = {
           /\b(NullVoice|spacing|signature|routine|notes|handler|corrected|beams|arpeggios|Volta_engraver|Voice|Vertical_align_engraver|Vaticana_ligature_engraver|VaticanaVoice|VaticanaStaff|Tweak_engraver|Tuplet_engraver|Trill_spanner_engraver|Timing_translator|Time_signature_performer|Time_signature_engraver|Tie_performer|Tie_engraver|Text_spanner_engraver|Text_engraver|Tempo_performer|Tab_tie_follow_engraver|Tab_staff_symbol_engraver|Tab_note_heads_engraver|TabVoice|TabStaff|System_start_delimiter_engraver|Stem_engraver|Stanza_number_engraver|Stanza_number_align_engraver|Staff_symbol_engraver|Staff_performer|Staff_collecting_engraver|StaffGroup|Staff|Spanner_break_forbid_engraver|Span_bar_stub_engraver|Span_bar_engraver|Span_arpeggio_engraver|Spacing_engraver|Slur_performer|Slur_engraver|Slash_repeat_engraver|Separating_line_group_engraver|Script_row_engraver|Script_engraver|Script_column_engraver|Score|Rhythmic_column_engraver|RhythmicStaff|Rest_engraver|Rest_collision_engraver|Repeat_tie_engraver|Repeat_acknowledge_engraver|Pure_from_neighbor_engraver|Pitched_trill_engraver|Pitch_squash_engraver|Piano_pedal_performer|Piano_pedal_engraver|Piano_pedal_align_engraver|PianoStaff|Phrasing_slur_engraver|PetrucciVoice|PetrucciStaff|Percent_repeat_engraver|Part_combine_engraver|Parenthesis_engraver|Paper_column_engraver|Output_property_engraver|Ottava_spanner_engraver|Note_spacing_engraver|Note_performer|Note_name_engraver|Note_heads_engraver|Note_head_line_engraver|NoteNames|New_fingering_engraver|New_dynamic_engraver|Multi_measure_rest_engraver|Metronome_mark_engraver|Mensural_ligature_engraver|MensuralVoice|MensuralStaff|Mark_engraver|Lyrics|Lyric_performer|Lyric_engraver|Ligature_bracket_engraver|Ledger_line_engraver|Laissez_vibrer_engraver|KievanVoice|KievanStaff|Key_performer|Key_engraver|Keep_alive_together_engraver|Instrument_switch_engraver|Instrument_name_engraver|Hyphen_engraver|Hara_kiri_engraver|Grob_pq_engraver|GregorianTranscriptionVoice|GregorianTranscriptionStaff|GrandStaff|Grace_spacing_engraver|Grace_engraver|Grace_beam_engraver|Global|Glissando_engraver|Fretboard_engraver|FretBoards|Forbid_line_break_engraver|Footnote_engraver|Font_size_engraver|Fingering_engraver|Figured_bass_position_engraver|Figured_bass_engraver|FiguredBass|Extender_engraver|Episema_engraver|Dynamics|Dynamic_performer|Dynamic_align_engraver|Drum_notes_engraver|Drum_note_performer|DrumVoice|DrumStaff|Double_percent_repeat_engraver|Dots_engraver|Dot_column_engraver|Devnull|Default_bar_line_engraver|Custos_engraver|Cue_clef_engraver|CueVoice|Control_track_performer|Concurrent_hairpin_engraver|Collision_engraver|Cluster_spanner_engraver|Clef_engraver|Chord_tremolo_engraver|Chord_name_engraver|ChordNames|ChordNameVoice|ChoirStaff|Breathing_sign_engraver|Break_align_engraver|Bend_engraver|Beam_performer|Beam_engraver|Beam_collision_engraver|Bar_number_engraver|Bar_engraver|Axis_group_engraver|Auto_beam_engraver|Arpeggio_engraver|Accidental_engraver|Score|volta|unfold|percent|tremolo)\b/,
         action: {
           token: "constructor",
-        },
-      },
-      // Cheat for chords :/
-      {
-        regex: /</,
-        action: {
-          token: "string",
-        },
-      },
-      {
-        regex: ">(128|64|32|16|8|4|2|1|\\breve|\\longa|\\maxima)?",
-        action: {
-          token: "string",
         },
       },
       {
@@ -112,7 +104,7 @@ const LILYPOND_MONARCH_PROVIDER: monacoEditor.languages.IMonarchLanguage = {
         },
       },
       {
-        regex: /[{}()[\]]/,
+        regex: /<<|>>|[{}()[\]<>]/,
         action: {
           token: "@brackets",
         },
@@ -196,17 +188,18 @@ const LILYPOND_MONARCH_PROVIDER: monacoEditor.languages.IMonarchLanguage = {
     ],
 
     lyricmode: [
+      { regex: /[^{}]+/, action: { token: "string" } },
       {
         regex: /{/,
         action: {
-          token: "comment",
+          token: "@brackets",
           next: "@push",
         },
       },
       {
         regex: /}/,
         action: {
-          token: "comment",
+          token: "@brackets",
           next: "@pop",
         },
       },

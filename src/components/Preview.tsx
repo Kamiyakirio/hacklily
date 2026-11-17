@@ -2,7 +2,7 @@
 // Copyright (C) 2017-present Jocelyn Stericker <jocelyn@nettek.ca>
 
 import DOMPurify from "dompurify";
-import { ZoomIn, ZoomOut } from "lucide-react";
+import { Hand, MousePointer2, ZoomIn, ZoomOut } from "lucide-react";
 import type * as monacoEditor from "monaco-editor";
 import {
   useEffect,
@@ -15,6 +15,8 @@ import {
 import { track } from "#/lib/analytics";
 import { decodeArrayBuffer } from "#/lib/base64Binary";
 import { renderVersionFor } from "#/lib/lilypondVersion";
+import { attachPreviewInteraction } from "#/lib/previewInteraction";
+import type { PreviewTool } from "#/lib/previewInteraction";
 import type { RenderResult, SvgRenderer } from "#/lib/SvgRenderer";
 import { cn } from "#/lib/utils";
 
@@ -190,7 +192,8 @@ interface Props {
    * Called whenever a note is clicked. The parent should let the <Editor /> know
    * so it can focus where the note is defined.
    */
-  onSelectionChanged(selection: monacoEditor.ISelection | null): void;
+  selections?: monacoEditor.ISelection[];
+  onSelectionChanged(selections: monacoEditor.ISelection[]): void;
 }
 
 /**
@@ -228,15 +231,22 @@ export default function Preview(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [zoom, setZoom] = useState(100);
+  const [tool, setTool] = useState<PreviewTool>("pan");
+  const renderedCode = useRef<string | null>(null);
+  const interaction = useRef<ReturnType<
+    typeof attachPreviewInteraction
+  > | null>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [frameDocument, setFrameDocument] = useState<Document | null>(null);
   const previousMIDIData = useRef<string | null>(null);
   const schedule = useRef<((code: string) => void) | null>(null);
   const selectionChanged = useEffectEvent(
-    (selection: monacoEditor.ISelection) => props.onSelectionChanged(selection),
+    (selections: monacoEditor.ISelection[]) =>
+      props.onSelectionChanged(selections),
   );
+  const currentSelections = useEffectEvent(() => props.selections || []);
   const applyResult = useEffectEvent(
-    (result: RenderResult, version: "stable" | "unstable") => {
+    (result: RenderResult, version: "stable" | "unstable", code: string) => {
       const files: string[] = result.files;
       const dirtyLogs = result.logs;
       const midi = result.midi || null;
@@ -335,6 +345,9 @@ export default function Preview(props: Props) {
         svg.removeAttribute("height");
       }
 
+      renderedCode.current = code;
+      interaction.current?.refresh();
+      interaction.current?.setSelections(props.selections || []);
       setError(null);
     },
   );
@@ -361,7 +374,12 @@ export default function Preview(props: Props) {
     frameDocument
       ?.getElementById("root")
       ?.style.setProperty("--preview-scale", String(zoom / 100));
-  }, [frameDocument, zoom]);
+    interaction.current?.refresh();
+    interaction.current?.setSelections(currentSelections());
+  }, [frameDocument, zoom, props.mode]);
+  useLayoutEffect(() => {
+    interaction.current?.setSelections(props.selections || []);
+  }, [props.selections, props.code]);
 
   useEffect(() => {
     if (!frameDocument) return;
@@ -382,142 +400,27 @@ export default function Preview(props: Props) {
     return () => frameDocument.removeEventListener("wheel", wheel);
   }, [frameDocument]);
 
+  const selectableSource = useEffectEvent(() =>
+    renderedCode.current === props.code ? props.code : null,
+  );
+  const currentTool = useEffectEvent(() => tool);
   useEffect(() => {
-    const body = frameDocument?.body;
-    if (!body) return;
-    const documentElement = frameDocument.documentElement;
-    let drag: {
-      pointerId: number;
-      x: number;
-      y: number;
-      left: number;
-      top: number;
-      button: number;
-      target: Element;
-      moved: boolean;
-    } | null = null;
-    let suppressClick = false;
-    let clickReset: ReturnType<typeof setTimeout> | undefined;
-
-    const finishDrag = (event?: PointerEvent) => {
-      if (!drag || (event && event.pointerId !== drag.pointerId)) return;
-      const current = drag;
-      drag = null;
-      documentElement.classList.remove("isPanning");
-      try {
-        if (current.target.hasPointerCapture?.(current.pointerId)) {
-          current.target.releasePointerCapture(current.pointerId);
-        }
-      } catch {
-        /* The SVG can be replaced while a pointer is captured. */
-      }
-      if (current.moved) {
-        suppressClick = true;
-        clearTimeout(clickReset);
-        clickReset = setTimeout(() => {
-          suppressClick = false;
-        }, 0);
-      }
-    };
-    const pointerDown = (event: PointerEvent) => {
-      if (
-        drag ||
-        event.pointerType === "touch" ||
-        (event.button !== 0 && event.button !== 1)
-      )
-        return;
-      const scroll = frameDocument.scrollingElement || documentElement;
-      const target = event.target as Element;
-      clearTimeout(clickReset);
-      suppressClick = false;
-      drag = {
-        pointerId: event.pointerId,
-        x: event.clientX,
-        y: event.clientY,
-        left: scroll.scrollLeft,
-        top: scroll.scrollTop,
-        button: event.button === 0 ? 1 : 4,
-        target,
-        moved: false,
-      };
-      try {
-        target.setPointerCapture?.(event.pointerId);
-      } catch {
-        /* Synthetic pointers and detached SVG targets cannot capture. */
-      }
-      if (event.button === 1) event.preventDefault();
-    };
-    const pointerMove = (event: PointerEvent) => {
-      if (!drag || event.pointerId !== drag.pointerId) return;
-      if (!(event.buttons & drag.button)) {
-        finishDrag(event);
-        return;
-      }
-      const dx = event.clientX - drag.x;
-      const dy = event.clientY - drag.y;
-      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
-      drag.moved = true;
-      suppressClick = true;
-      documentElement.classList.add("isPanning");
-      event.preventDefault();
-      const scroll = frameDocument.scrollingElement || documentElement;
-      scroll.scrollLeft = drag.left - dx;
-      scroll.scrollTop = drag.top - dy;
-    };
-    const preventNativeDrag = (event: DragEvent) => event.preventDefault();
-    const blur = () => finishDrag();
-    const click = (ev: MouseEvent) => {
-      ev.preventDefault();
-      if (suppressClick) {
-        suppressClick = false;
-        ev.stopPropagation();
-        return;
-      }
-      let target: HTMLElement | null = ev.target as HTMLElement | null;
-      while (target && target.localName !== "a") {
-        target = target.parentElement;
-      }
-      if (target && target.localName === "a") {
-        const link: string | null =
-          target.getAttribute("xlink:href") || target.getAttribute("href");
-        if (!link?.startsWith("textedit:")) {
-          return;
-        }
-        const pathAndLocation: string[] = link.split(".ly:");
-        if (pathAndLocation.length === 2) {
-          const [line, startColumn, endColumn] = pathAndLocation[1].split(":");
-          selectionChanged({
-            positionColumn: parseInt(endColumn, 10) + 1,
-            positionLineNumber: parseInt(line, 10),
-            selectionStartColumn: parseInt(startColumn, 10) + 1,
-            selectionStartLineNumber: parseInt(line, 10),
-          });
-        }
-      }
-    };
-    body.addEventListener("click", click);
-    frameDocument.addEventListener("pointerdown", pointerDown);
-    frameDocument.addEventListener("pointermove", pointerMove, {
-      passive: false,
+    if (!frameDocument?.body) return;
+    const controller = attachPreviewInteraction(frameDocument, {
+      source: () => selectableSource(),
+      onSelect: (selections) => selectionChanged(selections),
     });
-    frameDocument.addEventListener("pointerup", finishDrag);
-    frameDocument.addEventListener("pointercancel", finishDrag);
-    frameDocument.addEventListener("lostpointercapture", finishDrag);
-    frameDocument.addEventListener("dragstart", preventNativeDrag);
-    frameDocument.defaultView?.addEventListener("blur", blur);
+    interaction.current = controller;
+    controller.setTool(currentTool());
+    controller.setSelections(currentSelections());
     return () => {
-      finishDrag();
-      clearTimeout(clickReset);
-      body.removeEventListener("click", click);
-      frameDocument.removeEventListener("pointerdown", pointerDown);
-      frameDocument.removeEventListener("pointermove", pointerMove);
-      frameDocument.removeEventListener("pointerup", finishDrag);
-      frameDocument.removeEventListener("pointercancel", finishDrag);
-      frameDocument.removeEventListener("lostpointercapture", finishDrag);
-      frameDocument.removeEventListener("dragstart", preventNativeDrag);
-      frameDocument.defaultView?.removeEventListener("blur", blur);
+      controller.destroy();
+      interaction.current = null;
     };
   }, [frameDocument]);
+  useEffect(() => {
+    interaction.current?.setTool(tool);
+  }, [tool]);
 
   useEffect(() => {
     const body = frameDocument?.body;
@@ -551,7 +454,7 @@ export default function Preview(props: Props) {
       const version = renderVersionFor(code);
       try {
         const result = await renderer.renderSvg(code, version);
-        if (active && code === latestCode) applyResult(result, version);
+        if (active && code === latestCode) applyResult(result, version, code);
       } catch (cause) {
         if (active && code === latestCode) reportError(cause, version);
       } finally {
@@ -613,10 +516,30 @@ export default function Preview(props: Props) {
       />
       {mode !== "edit" && (
         <ButtonGroup
-          aria-label="Preview zoom"
+          aria-label="Preview controls"
           className="absolute right-3 top-3 z-10 rounded-lg bg-background shadow-md"
           title="Ctrl/⌘ + mouse wheel to zoom"
         >
+          <Button
+            variant={tool === "pan" ? "default" : "outline"}
+            size="icon"
+            aria-label="Pan score"
+            title="Pan score (drag to move; middle button always pans)"
+            aria-pressed={tool === "pan"}
+            onClick={() => setTool("pan")}
+          >
+            <Hand />
+          </Button>
+          <Button
+            variant={tool === "select" ? "default" : "outline"}
+            size="icon"
+            aria-label="Select notes"
+            title="Select notes (drag across systems; Shift extends, Ctrl/Cmd adds)"
+            aria-pressed={tool === "select"}
+            onClick={() => setTool("select")}
+          >
+            <MousePointer2 />
+          </Button>
           <Button
             variant="outline"
             size="icon"

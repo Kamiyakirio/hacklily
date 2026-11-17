@@ -37,7 +37,6 @@ import { mergeState } from "#/lib/state";
 import { cn } from "#/lib/utils";
 
 import logoSvg from "./logo.svg";
-import MusicNotationPalette from "./MusicNotationPalette";
 
 export type ViewMode = "view" | "edit" | "both";
 export const MODE_VIEW: ViewMode = "view";
@@ -82,7 +81,8 @@ interface Props {
   onImportMusicXML(): void;
   onShowAbout(): void;
   onShowFileAssociations(): void;
-  onInsertNotation(code: string): void;
+  musicSymbolPanel: boolean;
+  onMusicSymbolPanelChanged(visible: boolean): void;
 }
 
 interface State {
@@ -97,7 +97,6 @@ interface State {
  * Renders the top of the app.
  */
 export default function Header(props: Props) {
-  const [showNotations, setShowNotations] = useState(false);
   const [state, updateState] = useReducer(mergeState<State>, {
     played: false,
     playing: false,
@@ -344,7 +343,12 @@ export default function Header(props: Props) {
   }
 
   return (
-    <header className="header flex h-12 items-center gap-4 border-b px-4">
+    <header
+      className={cn(
+        "header flex h-12 items-center gap-4 border-b px-4",
+        props.musicSymbolPanel && "header-with-symbols",
+      )}
+    >
       <div className="flex items-center align gap-2">
         {windowWidth >= MIN_REASONABLE_WIDTH && (
           <img src={logoSvg} className="mr-4 py-2.25 scale-x-[-1] w-8" alt="" />
@@ -388,12 +392,6 @@ export default function Header(props: Props) {
                 <ChevronDown size="1em" className="inline" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="min-w-48">
-                <DropdownMenuItem
-                  disabled={!canSave}
-                  onClick={() => setShowNotations(true)}
-                >
-                  <Music size="1em" className="inline" /> Common music symbols…
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleShowClef}>
                   Clef&hellip;
                 </DropdownMenuItem>
@@ -422,6 +420,13 @@ export default function Header(props: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent className="min-w-52">
               <DropdownMenuCheckboxItem
+                checked={props.musicSymbolPanel}
+                onCheckedChange={props.onMusicSymbolPanelChanged}
+              >
+                <Music size="1em" />
+                Music symbol panel
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
                 checked={props.wordWrap}
                 onCheckedChange={props.onWordWrapChanged}
               >
@@ -436,12 +441,6 @@ export default function Header(props: Props) {
           {played && midi != null ? renderTime() : playButton}
         </ButtonGroup>
       </div>
-      {showNotations && (
-        <MusicNotationPalette
-          onHide={() => setShowNotations(false)}
-          onInsert={props.onInsertNotation}
-        />
-      )}
     </header>
   );
 }

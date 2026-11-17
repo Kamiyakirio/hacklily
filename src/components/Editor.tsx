@@ -13,6 +13,11 @@ import {
 } from "react";
 import ReactMonacoEditor from "react-monaco-editor";
 
+import { applyMusicNotationToRanges } from "#/lib/applyMusicNotation";
+import { registerIntervalShortcuts } from "#/lib/intervalShortcuts";
+import { readLilypondNotes } from "#/lib/lilypondSource";
+import type { MusicNotation } from "#/lib/musicNotations";
+import { stackNoteIntervals } from "#/lib/stackNoteIntervals";
 import { cn } from "#/lib/utils";
 import CodelensProvider from "#/monacoConfig/CodelensProvider";
 import Commands from "#/monacoConfig/Commands";
@@ -37,7 +42,10 @@ export interface EditorHandle {
   getMakelilyProperties(): MakelilyProps;
   insertText(text: string): void;
   insertNotation(text: string): void;
+  getSelectedNoteCount(): number;
+  applyNotation(notation: MusicNotation): boolean;
   selectAll(): void;
+  selectNotes(selections: monacoEditor.ISelection[]): void;
 }
 
 interface Props {
@@ -49,10 +57,9 @@ interface Props {
   onWordWrapChanged(enabled: boolean): void;
 
   /**
-   * When this changes, the selection changes. Used so that when you click on a
-   * note in the preview, it highlights where the note is defined in the editor.
+   * Reports source selections so the preview follows the editor as well.
    */
-  defaultSelection: monacoEditor.ISelection | null;
+  onSelectionChanged?(selections: monacoEditor.ISelection[]): void;
 
   /**
    * Lilypond logs -- used to render errors
@@ -68,6 +75,7 @@ interface Props {
    * Called when an edit occurs. <Editor /> is a controlled component.
    */
   onSetCode(newCode: string): void;
+  onSelectedNotesChanged?(count: number): void;
 
   showMakelily(tool?: string, cb?: (ly: string) => void): void;
 }
@@ -209,6 +217,16 @@ export default function Editor({ ref, ...props }: Props) {
     }
   }
 
+  function selectNotes(selections: monacoEditor.ISelection[]): void {
+    if (!editorInstance) return;
+    if (selections.length) {
+      editorInstance.setSelections(selections);
+      editorInstance.revealLineInCenter(selections[0].selectionStartLineNumber);
+      editorInstance.focus();
+    } else if (editorInstance.getPosition())
+      editorInstance.setPosition(editorInstance.getPosition());
+  }
+
   function insertNotation(text: string): void {
     const model = editorInstance?.getModel();
     const selection = editorInstance?.getSelection();
@@ -228,7 +246,76 @@ export default function Editor({ ref, ...props }: Props) {
     editorInstance.revealPositionInCenterIfOutsideViewport(
       editorInstance.getPosition(),
     );
-    // Focus after the palette closes and the editor becomes visible again.
+    restoreEditorFocus();
+  }
+
+  function getSelectedNoteCount(): number {
+    const model = editorInstance?.getModel();
+    const selections = editorInstance?.getSelections() || [];
+    if (!model || selections.every((selection) => selection.isEmpty()))
+      return 0;
+    const ranges = selections.map((selection) => ({
+      start: model.getOffsetAt(selection.getStartPosition()),
+      end: model.getOffsetAt(selection.getEndPosition()),
+    }));
+    return readLilypondNotes(model.getValue()).notes.filter(
+      (note) =>
+        note.pitched &&
+        ranges.some(
+          (range) =>
+            range.start < range.end &&
+            note.start < range.end &&
+            note.end > range.start,
+        ),
+    ).length;
+  }
+
+  function applyNotation(notation: MusicNotation): boolean {
+    const model = editorInstance?.getModel();
+    const selections = editorInstance?.getSelections();
+    if (!model || !selections?.length) return false;
+    const source = model.getValue();
+    const result = applyMusicNotationToRanges(
+      source,
+      selections.map((selection) => ({
+        start: model.getOffsetAt(selection.getStartPosition()),
+        end: model.getOffsetAt(selection.getEndPosition()),
+      })),
+      notation,
+    );
+    if (!result.applied) return false;
+    if (result.edits.length) {
+      editorInstance.pushUndoStop();
+      editorInstance.executeEdits(
+        "apply-music-notation",
+        result.edits.map((change) => ({
+          range: monacoEditor.Range.fromPositions(
+            model.getPositionAt(change.start),
+            model.getPositionAt(change.end),
+          ),
+          text: change.text,
+        })),
+        () =>
+          result.selections.map((selection, index) => {
+            const newStart = model.getPositionAt(selection.start);
+            const newEnd = model.getPositionAt(selection.end);
+            const backwards =
+              selections[index].getDirection() ===
+              monacoEditor.SelectionDirection.RTL;
+            return monacoEditor.Selection.fromPositions(
+              backwards ? newEnd : newStart,
+              backwards ? newStart : newEnd,
+            );
+          }),
+      );
+      editorInstance.pushUndoStop();
+    }
+    restoreEditorFocus();
+    return true;
+  }
+
+  function restoreEditorFocus() {
+    // Allow a view-mode change to reveal the editor before restoring focus.
     requestAnimationFrame(() => {
       if (editorInstance.getDomNode()?.isConnected) editorInstance.focus();
     });
@@ -241,8 +328,15 @@ export default function Editor({ ref, ...props }: Props) {
     registeredMonacoComponents = true;
 
     monacoModule.languages.register({ id: "lilypond" });
+    const brackets = LILYPOND_MONARCH_PROVIDER.brackets.map(
+      ({ open, close }): [string, string] => [open, close],
+    );
     monacoModule.languages.setLanguageConfiguration("lilypond", {
       comments: { lineComment: "%", blockComment: ["%{", "%}"] },
+      brackets,
+      colorizedBracketPairs: brackets,
+      // Matching should not introduce automatic closers while typing hairpins.
+      autoClosingPairs: [],
     });
     monacoModule.languages.setMonarchTokensProvider(
       "lilypond",
@@ -260,12 +354,98 @@ export default function Editor({ ref, ...props }: Props) {
     getMakelilyProperties,
     insertText,
     insertNotation,
+    getSelectedNoteCount,
+    applyNotation,
     selectAll,
+    selectNotes,
   }));
 
   useEffect(() => {
     editorInstance?.layout();
   }, [editorInstance, props.mode]);
+  useEffect(() => {
+    // Fast Refresh can keep an editor alive while its language rules change.
+    if (editorInstance) handleEditorWillMount(monacoEditor);
+  }, [editorInstance]);
+  const addInterval = useEffectEvent((interval: number, direction: 1 | -1) => {
+    const model = editorInstance?.getModel();
+    const selections = editorInstance?.getSelections();
+    if (!model || !selections?.length) return;
+    const result = stackNoteIntervals(
+      model.getValue(),
+      selections.map((selection) => ({
+        start: model.getOffsetAt(selection.getStartPosition()),
+        end: model.getOffsetAt(selection.getEndPosition()),
+      })),
+      interval,
+      direction,
+    );
+    if (!result.edits.length) return;
+    editorInstance.pushUndoStop();
+    editorInstance.executeEdits(
+      "stack-note-interval",
+      result.edits.map((edit) => ({
+        range: monacoEditor.Range.fromPositions(
+          model.getPositionAt(edit.start),
+          model.getPositionAt(edit.end),
+        ),
+        text: edit.text,
+      })),
+      () =>
+        result.selections.map((selection, index) => {
+          const start = model.getPositionAt(selection.start);
+          const end = model.getPositionAt(selection.end);
+          const backwards =
+            selections[index].getDirection() ===
+            monacoEditor.SelectionDirection.RTL;
+          return monacoEditor.Selection.fromPositions(
+            backwards ? end : start,
+            backwards ? start : end,
+          );
+        }),
+    );
+    editorInstance.pushUndoStop();
+  });
+  useEffect(() => {
+    if (!editorInstance) return;
+    const intervals = Array.from({ length: 8 }, (_, index) => index + 1);
+    const actions = intervals.flatMap((interval) =>
+      ([1, -1] as const).map((direction) =>
+        editorInstance.addAction({
+          id: `score.stackInterval.${direction === 1 ? "above" : "below"}.${interval}`,
+          label: `Add interval ${interval} ${direction === 1 ? "above" : "below"} the highest note`,
+          precondition: "editorTextFocus",
+          run: () => addInterval(interval, direction),
+        }),
+      ),
+    );
+    const keyboard = registerIntervalShortcuts(
+      editorInstance,
+      (interval, direction) => addInterval(interval, direction),
+    );
+    return () => {
+      keyboard.dispose();
+      actions.forEach((action) => action.dispose());
+    };
+  }, [editorInstance]);
+  const reportSelectedNotes = useEffectEvent(() => {
+    props.onSelectedNotesChanged?.(getSelectedNoteCount());
+    props.onSelectionChanged?.(editorInstance?.getSelections() || []);
+  });
+  useEffect(() => {
+    if (!editorInstance) return;
+    reportSelectedNotes();
+    const selectionListener = editorInstance.onDidChangeCursorSelection(() =>
+      reportSelectedNotes(),
+    );
+    const contentListener = editorInstance.onDidChangeModelContent(() =>
+      reportSelectedNotes(),
+    );
+    return () => {
+      selectionListener.dispose();
+      contentListener.dispose();
+    };
+  }, [editorInstance]);
   const toggleWordWrap = useEffectEvent(() =>
     props.onWordWrapChanged(!props.wordWrap),
   );
@@ -279,14 +459,6 @@ export default function Editor({ ref, ...props }: Props) {
     });
     return () => action.dispose();
   }, [editorInstance]);
-  useEffect(() => {
-    if (!editorInstance || !props.defaultSelection) return;
-    editorInstance.setSelection(props.defaultSelection);
-    editorInstance.revealLineInCenter(
-      props.defaultSelection.selectionStartLineNumber,
-    );
-    editorInstance.focus();
-  }, [editorInstance, props.defaultSelection]);
   useEffect(() => {
     if (!editorInstance) return;
     const logs = props.logs;
@@ -328,6 +500,8 @@ export default function Editor({ ref, ...props }: Props) {
       automaticLayout: true,
       wordWrap: props.wordWrap ? "on" : "off",
       autoClosingBrackets: "always",
+      matchBrackets: "always",
+      bracketPairColorization: { enabled: true },
       minimap: {
         enabled: false,
       },

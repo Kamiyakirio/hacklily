@@ -155,7 +155,7 @@ describe("preview rendering lifetime", () => {
   });
 
   it("maps native source links without subtracting the old server's extra line", async () => {
-    await show("score");
+    await show("c4 d4");
     await act(async () => vi.advanceTimersByTime(1000));
     await act(async () =>
       renders[0].resolve({
@@ -183,12 +183,14 @@ describe("preview rendering lifetime", () => {
         new MouseEvent("click", { bubbles: true, cancelable: true }),
       ),
     );
-    expect(onSelectionChanged).toHaveBeenCalledWith(
+    expect(onSelectionChanged).toHaveBeenCalledWith([
       expect.objectContaining({
         positionLineNumber: 1,
         selectionStartLineNumber: 1,
+        selectionStartColumn: 1,
+        positionColumn: 3,
       }),
-    );
+    ]);
   });
 
   it("keeps zoom across new pages and view modes without recompiling on zoom", async () => {
@@ -294,7 +296,7 @@ describe("preview rendering lifetime", () => {
   });
 
   it("pans from a note without activating it, but preserves clicks with a small pointer movement", async () => {
-    await show("score");
+    await show("c4 d4");
     await act(async () => vi.advanceTimersByTime(1000));
     await act(async () =>
       renders[0].resolve({
@@ -330,9 +332,9 @@ describe("preview rendering lifetime", () => {
         new MouseEvent("click", { bubbles: true, cancelable: true }),
       ),
     );
-    expect(onSelectionChanged).toHaveBeenCalledWith(
+    expect(onSelectionChanged).toHaveBeenCalledWith([
       expect.objectContaining({ positionLineNumber: 1 }),
-    );
+    ]);
     expect(scroll.scrollLeft).toBe(180);
     expect(scroll.scrollTop).toBe(210);
   });

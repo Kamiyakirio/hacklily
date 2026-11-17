@@ -33,7 +33,8 @@ function headerProps(midi: ArrayBuffer): ComponentProps<typeof Header> {
     onExportPDF: vi.fn(),
     onShowAbout: vi.fn(),
     onShowFileAssociations: vi.fn(),
-    onInsertNotation: vi.fn(),
+    musicSymbolPanel: true,
+    onMusicSymbolPanelChanged: vi.fn(),
   };
 }
 

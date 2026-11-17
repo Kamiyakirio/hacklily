@@ -96,6 +96,7 @@
   --foreground: #1c2127;
   --card: #ffffff;
   --card-foreground: #1c2127;
+  --toolbar-background: #efefef;
   --popover: #ffffff;
   --popover-foreground: #1c2127;
   --primary: #2d72d2;
@@ -119,6 +120,7 @@
     --foreground: #f6f7f9;
     --card: #2f343c;
     --card-foreground: #f6f7f9;
+    --toolbar-background: #24343c;
     --popover: #2f343c;
     --popover-foreground: #f6f7f9;
     --primary: #2d72d2;
@@ -143,6 +145,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-toolbar: var(--toolbar-background);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);

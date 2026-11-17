@@ -34,6 +34,7 @@ import Header, { MIN_BOTH_WIDTH, MODE_BOTH, MODE_VIEW } from "./Header";
 import ModalAbout from "./ModalAbout";
 import ModalFileAssociations from "./ModalFileAssociations";
 import ModalUnsavedChangesInterstitial from "./ModalUnsavedChangesInterstitial";
+import MusicSymbolPanel from "./MusicSymbolPanel";
 import NewScoreWizard from "./NewScoreWizard";
 import Preview from "./Preview";
 import { Button } from "./ui/button";
@@ -42,6 +43,7 @@ import { useColourScheme } from "./useColourScheme";
 const Makelily = lazy(() => import("./Makelily"));
 const DRAFT_KEY = "hacklily.desktop.draft";
 const WORD_WRAP_KEY = "hacklily.desktop.wordWrap";
+const SYMBOL_PANEL_KEY = "hacklily.desktop.musicSymbolPanel";
 const DEFAULT_SONG = `\\version "2.26.0"
 
 \\header {
@@ -122,10 +124,18 @@ export default function App() {
       return false;
     }
   });
+  const [musicSymbolPanel, setMusicSymbolPanel] = useState(() => {
+    try {
+      return localStorage.getItem(SYMBOL_PANEL_KEY) !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const [selectedNotes, setSelectedNotes] = useState(0);
   const [logs, setLogs] = useState<string | null>(null);
   const [midi, setMidi] = useState<ArrayBuffer | null>(null);
   const [compiledSource, setCompiledSource] = useState<string | null>(null);
-  const [selection, setSelection] = useState<monaco.ISelection | null>(null);
+  const [selection, setSelection] = useState<monaco.ISelection[]>([]);
   const [engine, setEngine] = useState<{
     ready: boolean;
     progress: EngineProgress | null;
@@ -167,6 +177,13 @@ export default function App() {
       /* Wrapping still works when preferences cannot be saved. */
     }
   }, [wordWrap]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SYMBOL_PANEL_KEY, String(musicSymbolPanel));
+    } catch {
+      /* The panel still works when preferences cannot be saved. */
+    }
+  }, [musicSymbolPanel]);
   useEffect(() => {
     let active = true;
     void prepareEngine((progress) => {
@@ -434,6 +451,8 @@ export default function App() {
         windowWidth={windowWidth}
         wordWrap={wordWrap}
         onWordWrapChanged={setWordWrap}
+        musicSymbolPanel={musicSymbolPanel}
+        onMusicSymbolPanelChanged={setMusicSymbolPanel}
         canExport={engine.ready && !busy}
         canSave={!busy}
         midiAvailable={!!currentMidi}
@@ -446,113 +465,131 @@ export default function App() {
         onSaveAs={() => void save(true)}
         onShowAbout={() => setAbout(true)}
         onShowFileAssociations={() => setAssociations(true)}
-        onInsertNotation={(code) => {
-          if (mode === MODE_VIEW) setMode("edit");
-          editor.current?.insertNotation(code);
-        }}
         onExportLy={() => void exportFile("ly")}
         onExportPDF={() => void exportFile("pdf")}
         onExportMIDI={() => void exportFile("midi")}
       />
-      {error && (
-        <div
-          role="alert"
-          className="absolute top-12 inset-x-0 z-50 bg-destructive p-3 text-destructive-foreground whitespace-pre-wrap max-h-60 overflow-auto"
-        >
-          {error}
-          <Button variant="outline" onClick={() => setError(null)}>
-            Close
-          </Button>
-        </div>
-      )}
-      {busy && (
-        <div
-          role="status"
-          className="absolute top-12 left-1/2 z-40 bg-background p-2"
-        >
-          Working…
-        </div>
-      )}
-      <EditorPreviewLayout mode={mode} windowWidth={windowWidth}>
-        <Editor
-          ref={editor}
-          code={score.src}
-          colourScheme={colourScheme}
-          wordWrap={wordWrap}
-          onWordWrapChanged={setWordWrap}
-          mode={mode}
-          logs={logs}
-          defaultSelection={selection}
-          showMakelily={showMakelily}
-          onSetCode={(src) => setScore((previous) => ({ ...previous, src }))}
+      {musicSymbolPanel && (
+        <MusicSymbolPanel
+          selectedNoteCount={selectedNotes}
+          disabled={busy}
+          onHide={() => setMusicSymbolPanel(false)}
+          onUseNotation={(notation) => {
+            if (!editor.current) return false;
+            if (mode === MODE_VIEW) setMode("edit");
+            if (editor.current.getSelectedNoteCount())
+              return editor.current.applyNotation(notation);
+            editor.current.insertNotation(notation.code);
+            return true;
+          }}
         />
-        {engine.ready ? (
-          <Preview
-            code={score.src}
-            logs={logs}
-            mode={mode}
-            renderer={renderer}
-            onLogsObtained={(value) => {
-              setLogs(value);
-              setCompiledSource(score.src);
-            }}
-            onMidiObtained={setMidi}
-            onSelectionChanged={setSelection}
-          />
-        ) : (
-          mode !== "edit" && (
-            <div
-              className="absolute inset-y-0 right-0 flex items-center justify-center p-8"
-              style={{ left: mode === MODE_BOTH ? "var(--editor-width)" : 0 }}
-            >
-              <div role="status" className="text-center max-w-lg space-y-3">
-                {engine.error ? (
-                  <>
-                    <p className="whitespace-pre-wrap" role="alert">
-                      {engine.error}
-                    </p>
-                    <Button
-                      onClick={() => {
-                        setEngine({
-                          ready: false,
-                          progress: null,
-                          error: null,
-                          version: null,
-                        });
-                        setRetry((value) => value + 1);
-                      }}
-                    >
-                      Retry
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <p>
-                      {progress?.stage === "downloading"
-                        ? `Downloading LilyPond${percent !== null ? ` ${percent}%` : "…"}`
-                        : progress?.stage === "extracting"
-                          ? "Installing LilyPond…"
-                          : "Preparing LilyPond…"}
-                    </p>
-                    {progress?.stage === "downloading" && (
-                      <progress
-                        aria-label="LilyPond download"
-                        max={progress.total || undefined}
-                        value={progress.downloaded}
-                        className="w-full"
-                      />
-                    )}
-                    <p className="text-sm text-muted-foreground">
-                      The first launch downloads the engine. After installation,
-                      rendering works offline.
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          )
+      )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {error && (
+          <div
+            role="alert"
+            className="absolute top-0 inset-x-0 z-50 bg-destructive p-3 text-destructive-foreground whitespace-pre-wrap max-h-60 overflow-auto"
+          >
+            {error}
+            <Button variant="outline" onClick={() => setError(null)}>
+              Close
+            </Button>
+          </div>
         )}
-      </EditorPreviewLayout>
+        {busy && (
+          <div
+            role="status"
+            className="absolute top-0 left-1/2 z-40 bg-background p-2"
+          >
+            Working…
+          </div>
+        )}
+        <EditorPreviewLayout mode={mode} windowWidth={windowWidth}>
+          <Editor
+            ref={editor}
+            code={score.src}
+            colourScheme={colourScheme}
+            wordWrap={wordWrap}
+            onWordWrapChanged={setWordWrap}
+            mode={mode}
+            logs={logs}
+            onSelectionChanged={setSelection}
+            showMakelily={showMakelily}
+            onSetCode={(src) => setScore((previous) => ({ ...previous, src }))}
+            onSelectedNotesChanged={setSelectedNotes}
+          />
+          {engine.ready ? (
+            <Preview
+              code={score.src}
+              logs={logs}
+              mode={mode}
+              renderer={renderer}
+              onLogsObtained={(value) => {
+                setLogs(value);
+                setCompiledSource(score.src);
+              }}
+              onMidiObtained={setMidi}
+              selections={selection}
+              onSelectionChanged={(selections) => {
+                setSelection(selections);
+                editor.current?.selectNotes(selections);
+              }}
+            />
+          ) : (
+            mode !== "edit" && (
+              <div
+                className="absolute inset-y-0 right-0 flex items-center justify-center p-8"
+                style={{ left: mode === MODE_BOTH ? "var(--editor-width)" : 0 }}
+              >
+                <div role="status" className="text-center max-w-lg space-y-3">
+                  {engine.error ? (
+                    <>
+                      <p className="whitespace-pre-wrap" role="alert">
+                        {engine.error}
+                      </p>
+                      <Button
+                        onClick={() => {
+                          setEngine({
+                            ready: false,
+                            progress: null,
+                            error: null,
+                            version: null,
+                          });
+                          setRetry((value) => value + 1);
+                        }}
+                      >
+                        Retry
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p>
+                        {progress?.stage === "downloading"
+                          ? `Downloading LilyPond${percent !== null ? ` ${percent}%` : "…"}`
+                          : progress?.stage === "extracting"
+                            ? "Installing LilyPond…"
+                            : "Preparing LilyPond…"}
+                      </p>
+                      {progress?.stage === "downloading" && (
+                        <progress
+                          aria-label="LilyPond download"
+                          max={progress.total || undefined}
+                          value={progress.downloaded}
+                          className="w-full"
+                        />
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        The first launch downloads the engine. After
+                        installation, rendering works offline.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
+          )}
+        </EditorPreviewLayout>
+      </div>
       {about && <ModalAbout onHide={() => setAbout(false)} />}
       {newWizard && (
         <NewScoreWizard

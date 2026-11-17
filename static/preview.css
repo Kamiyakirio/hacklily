@@ -17,6 +17,30 @@ svg a {
   cursor: grab;
 }
 
+html[data-preview-tool="select"],
+html[data-preview-tool="select"] svg a,
+html.isSelectingNotes * {
+  cursor: crosshair;
+}
+
+svg a[data-preview-selected] {
+  color: #2d72d2 !important;
+}
+
+.score-selection-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.score-note-highlight {
+  box-sizing: border-box;
+  position: absolute;
+  border: 1px solid rgba(45, 114, 210, 0.55);
+  border-radius: 3px;
+  background: rgba(45, 114, 210, 0.14);
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -24,6 +48,7 @@ body {
 }
 
 #root {
+  position: relative;
   background-color: white;
   --preview-scale: 1;
 }
